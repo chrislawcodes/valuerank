@@ -419,6 +419,34 @@ async function registerDomainAnalysisWarmingSchedule(): Promise<void> {
   }
 }
 
+async function registerWinRateStabilityWarmingSchedule(): Promise<void> {
+  try {
+    const boss = getBoss();
+    await boss
+      .unschedule('refresh_win_rate_stability_snapshot', 'warm_all_domains')
+      .catch(() => undefined);
+    // Hourly warm of the all-domains win-rate-stability snapshot. Offset from the
+    // domain-analysis warm (:15) so the two heavy rebuilds do not overlap.
+    await boss.schedule(
+      'refresh_win_rate_stability_snapshot',
+      '25 * * * *',
+      {
+        domainId: null,
+        domainIds: null,
+        signature: null,
+        reason: 'scheduled_warm',
+      },
+      { key: 'warm_all_domains', singletonKey: 'warm_all_domains' },
+    );
+    log.info(
+      { jobType: 'refresh_win_rate_stability_snapshot', cron: '25 * * * *', scope: 'ALL_DOMAINS' },
+      'Registered win-rate-stability warming schedule',
+    );
+  } catch (error) {
+    log.error({ error }, 'Failed to register win-rate-stability warming schedule');
+  }
+}
+
 /**
  * Stops only the recovery interval (not the activity tracking).
  */
@@ -475,6 +503,7 @@ export async function startRecoveryScheduler(): Promise<void> {
   await registerRunStateAuditSchedule();
   await registerAnalysisResultJanitorSchedule();
   await registerDomainAnalysisWarmingSchedule();
+  await registerWinRateStabilityWarmingSchedule();
 
   // Run startup recovery first
   let hasActiveRuns = false;

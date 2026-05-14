@@ -131,6 +131,11 @@ describe('GraphQL modelsWinRateStability', () => {
   let domainBId: string;
 
   beforeAll(async () => {
+    // modelsWinRateStability is now snapshot-cached. Clear any leftover
+    // win_rate_stability snapshots so cache reads start from a clean slate and
+    // these assertions exercise a fresh build rather than stale cached output.
+    await db.assumptionAnalysisSnapshot.deleteMany({ where: { analysisType: 'win_rate_stability' } });
+
     await db.user.upsert({
       where: { id: TEST_USER.id },
       create: { id: TEST_USER.id, email: TEST_USER.email, passwordHash: 'test-hash' },
@@ -410,6 +415,7 @@ describe('GraphQL modelsWinRateStability', () => {
       DEF_INCONS, DEF_NORM_FAIL, DEF_NO_VA, DEF_LEGACY,
     ];
 
+    await db.assumptionAnalysisSnapshot.deleteMany({ where: { analysisType: 'win_rate_stability' } });
     await db.analysisResult.deleteMany({ where: { runId: { in: allRunIds } } });
     await db.scenario.deleteMany({ where: { definitionId: { in: allDefIds } } });
     await db.run.deleteMany({ where: { id: { in: allRunIds } } });

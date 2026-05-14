@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { Loader2 } from 'lucide-react';
 import type { ModelsStabilityModelResult, ModelsStabilitySkippedVignette } from '../../api/operations/modelsStability';
 import { Button } from '../ui/Button';
 import { ErrorMessage } from '../ui/ErrorMessage';
@@ -20,6 +21,7 @@ type WinRateStabilitySectionProps = {
   fetching: boolean;
   errorMessage: string | null;
   winRateMode?: 'all' | 'exc-neutral';
+  cacheStatus?: string | null;
 };
 
 function pct(value: number | null | undefined): string {
@@ -96,19 +98,21 @@ export function WinRateStabilitySection({
   fetching,
   errorMessage,
   winRateMode,
+  cacheStatus,
 }: WinRateStabilitySectionProps) {
   const [sort, setSort] = useState<Sort>(DEFAULT_SORT);
   const sorted = useMemo(() => sortModels(models, sort), [models, sort]);
+  const isUpdating = cacheStatus === 'UPDATING';
 
   if (errorMessage != null) {
     return <ErrorMessage message={`Failed to load response consistency: ${errorMessage}`} />;
   }
 
-  if (fetching && models.length === 0) {
+  if (fetching && models.length === 0 && !isUpdating) {
     return <Loading size="lg" text="Loading response consistency..." />;
   }
 
-  if (models.length === 0) {
+  if (models.length === 0 && !isUpdating) {
     return null;
   }
 
@@ -116,6 +120,16 @@ export function WinRateStabilitySection({
     <section className="space-y-4 rounded-xl border border-gray-200 bg-white p-4 md:p-5">
       <div className="space-y-1">
         <h2 className="text-lg font-semibold text-gray-900">Response Consistency by Model</h2>
+        {isUpdating && (
+          <div className="flex items-center gap-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+            <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" aria-hidden="true" />
+            <span>
+              {models.length === 0
+                ? 'Building response consistency — refresh in a moment.'
+                : 'Rebuilding response consistency — showing the last cached result.'}
+            </span>
+          </div>
+        )}
         {winRateMode === 'exc-neutral' && (
           <p className="text-sm text-amber-700">
             Consistency metrics include neutral outcomes and are not affected by the Exc. neutral mode.
@@ -138,6 +152,7 @@ export function WinRateStabilitySection({
         </div>
       )}
 
+      {models.length > 0 && (
       <div className="overflow-x-auto rounded border border-gray-100">
         <table className="w-full table-auto border-collapse text-xs">
           <caption className="sr-only">Response consistency by model</caption>
@@ -190,6 +205,7 @@ export function WinRateStabilitySection({
           </tbody>
         </table>
       </div>
+      )}
     </section>
   );
 }

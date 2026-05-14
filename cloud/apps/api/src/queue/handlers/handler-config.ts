@@ -18,6 +18,7 @@ import type {
   AggregateAnalysisJobData,
   RefreshDomainAnalysisSnapshotJobData,
   RefreshPressureSensitivitySnapshotJobData,
+  RefreshWinRateStabilitySnapshotJobData,
   StartDomainLaunchJobData,
 } from '../types.js';
 import { createProbeScenarioHandler } from './probe-scenario/index.js';
@@ -32,6 +33,7 @@ import { createAnalysisResultJanitorHandler } from './analysis-result-janitor.js
 import { createAggregateAnalysisHandler } from './aggregate-analysis.js';
 import { createRefreshDomainAnalysisSnapshotHandler } from './refresh-domain-analysis-snapshot.js';
 import { createRefreshPressureSensitivitySnapshotHandler } from './refresh-pressure-sensitivity-snapshot.js';
+import { createRefreshWinRateStabilitySnapshotHandler } from './refresh-win-rate-stability-snapshot.js';
 import { createStartDomainLaunchHandler } from './start-domain-launch.js';
 
 // Re-export job data types for handlers
@@ -48,6 +50,7 @@ export type {
   AggregateAnalysisJobData,
   RefreshDomainAnalysisSnapshotJobData,
   RefreshPressureSensitivitySnapshotJobData,
+  RefreshWinRateStabilitySnapshotJobData,
   StartDomainLaunchJobData,
 };
 
@@ -179,6 +182,16 @@ export const handlerRegistrations: HandlerRegistration[] = [
         'refresh_pressure_sensitivity_snapshot',
         { batchSize },
         createRefreshPressureSensitivitySnapshotHandler()
+      );
+    },
+  },
+  {
+    name: 'refresh_win_rate_stability_snapshot',
+    register: async (boss, batchSize) => {
+      await boss.work<RefreshWinRateStabilitySnapshotJobData>(
+        'refresh_win_rate_stability_snapshot',
+        { batchSize },
+        createRefreshWinRateStabilitySnapshotHandler()
       );
     },
   },

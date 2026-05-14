@@ -35,6 +35,9 @@ export type ModelsStabilityModelResultShape = {
 export type ModelsStabilityResultShape = {
   models: ModelsStabilityModelResultShape[];
   skippedVignettes: ModelsStabilitySkippedVignetteShape[];
+  // Set at read time by the snapshot cache; absent on the persisted snapshot.
+  cacheStatus?: 'FRESH' | 'UPDATING' | 'OUT_OF_DATE' | null;
+  generatedAt?: string | null;
 };
 
 const ModelsStabilitySkippedVignetteRef = builder.objectRef<ModelsStabilitySkippedVignetteShape>('ModelsStabilitySkippedVignette');
@@ -84,5 +87,7 @@ builder.objectType(ModelsStabilityResultRef, {
   fields: (t) => ({
     models: t.expose('models', { type: [ModelsStabilityModelResultRef] }),
     skippedVignettes: t.expose('skippedVignettes', { type: [ModelsStabilitySkippedVignetteRef] }),
+    cacheStatus: t.exposeString('cacheStatus', { nullable: true }),
+    generatedAt: t.exposeString('generatedAt', { nullable: true }),
   }),
 });

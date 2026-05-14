@@ -1,5 +1,7 @@
 query ModelsWinRateStability($signature: String, $domainId: ID, $domainIds: [ID!]) {
   modelsWinRateStability(signature: $signature, domainId: $domainId, domainIds: $domainIds) {
+    cacheStatus
+    generatedAt
     models {
       modelId
       label

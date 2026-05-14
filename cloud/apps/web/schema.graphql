@@ -1722,15 +1722,17 @@ type ModelsStabilityModelResult {
   label: String!
   modelId: String!
   qualifyingVignetteCount: Int!
-  totalTranscriptCount: Int!
   softLeanShare: Float
   stableShare: Float
   tornShare: Float
+  totalTranscriptCount: Int!
   unstableShare: Float
   vignettes: [ModelsStabilityVignetteResult!]!
 }
 
 type ModelsStabilityResult {
+  cacheStatus: String
+  generatedAt: String
   models: [ModelsStabilityModelResult!]!
   skippedVignettes: [ModelsStabilitySkippedVignette!]!
 }
