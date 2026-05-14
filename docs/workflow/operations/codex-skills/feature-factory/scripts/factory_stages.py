@@ -238,6 +238,15 @@ def preferred_diff_base_ref(slug: str, requested: str | None = None) -> str | No
 # ---------------------------------------------------------------------------
 
 
+def _completed_artifact_sha(slug: str, stage: str) -> str:
+    """Return the stored completed_artifact_sha for *stage*, or '' if not set."""
+    state = load_workflow_state(slug)
+    stage_state = state.get("stages", {}).get(stage, {})
+    if not isinstance(stage_state, dict):
+        return ""
+    return str(stage_state.get("completed_artifact_sha", "") or "")
+
+
 def stage_manifest_state(slug: str, stage: str) -> dict[str, object]:
     artifact_path = default_artifact_path(slug, stage)
     manifest_path = checkpoint_manifest_path(slug, stage)
@@ -252,10 +261,27 @@ def stage_manifest_state(slug: str, stage: str) -> dict[str, object]:
         "healthy": False,
         "detail": "",
     }
-    if manifest_path.exists():
-        healthy, detail = verify_checkpoint_manifest(manifest_path)
-        state["healthy"] = healthy
-        state["detail"] = detail
+    if not manifest_path.exists():
+        return state
+    # Fast path: if the checkpoint persisted a completed_artifact_sha and the
+    # current normalized hash of the artifact matches it, the stage is done.
+    # Skip the live verify subprocess entirely — it would re-hash and compare
+    # against review-file frontmatter, which breaks when the artifact is
+    # legitimately edited after checkpointing (e.g. reconcile appending to
+    # plan.md, operator ticking checkboxes in tasks.md).
+    if artifact_exists:
+        stored_sha = _completed_artifact_sha(slug, stage)
+        if stored_sha:
+            current_sha = normalized_artifact_hash(stage, artifact_path)
+            if stored_sha == current_sha:
+                state["healthy"] = True
+                state["detail"] = ""
+                return state
+    # Fall through to the existing live verify path for genuinely-stale
+    # checkpoints and for the first run (no stored sha yet).
+    healthy, detail = verify_checkpoint_manifest(manifest_path)
+    state["healthy"] = healthy
+    state["detail"] = detail
     return state
 
 

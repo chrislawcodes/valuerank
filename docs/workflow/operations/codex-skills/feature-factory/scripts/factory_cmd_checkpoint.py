@@ -132,6 +132,25 @@ def _persist_last_action_result(slug: str, payload: dict[str, object]) -> None:
     )
 
 
+def _persist_completed_artifact_sha(slug: str, stage: str, artifact_sha: str) -> None:
+    """Write completed_artifact_sha into state.json:stages.<stage> on successful checkpoint.
+
+    This is the persistent "done" signal that lets status / next_action skip
+    the live verify subprocess when the artifact hasn't changed since the
+    checkpoint succeeded.  Both sides must use the same normalized_artifact_hash
+    function so the plan-stage reconciliation-section stripping stays consistent.
+    """
+    def _write(state: dict) -> None:
+        stages = state.setdefault("stages", {})
+        stage_state = stages.get(stage)
+        if not isinstance(stage_state, dict):
+            stage_state = {}
+        stage_state["completed_artifact_sha"] = artifact_sha
+        stages[stage] = stage_state
+
+    update_workflow_state(slug, _write)
+
+
 def _rollback_adversarial_round(slug: str, stage: str) -> None:
     state = load_workflow_state(slug)
     stage_state = state.get("stages", {}).get(stage, {})
@@ -464,10 +483,16 @@ def command_checkpoint(args: argparse.Namespace) -> int:
             if tasks_file.exists():
                 try:
                     task_text = tasks_file.read_text(encoding="utf-8")
+                    non_empty_lines = [l for l in task_text.splitlines() if l.strip()]
                     task_count = sum(
                         1 for line in task_text.splitlines()
                         if line.strip().startswith("- [ ]") or line.strip().startswith("- [x]") or line.strip().startswith("- [X]")
                     )
+                    if task_count == 0 and non_empty_lines and args.stage == "tasks":
+                        raise SystemExit(
+                            f"tasks.md has {len(non_empty_lines)} non-empty line(s) but 0 checkbox-style tasks "
+                            f"(- [ ] / - [x]) — did you use plain bullets by mistake?"
+                        )
                     if task_count < SMALL_TASK_SET_THRESHOLD:
                         small_task_set = True
                         print(
@@ -475,6 +500,8 @@ def command_checkpoint(args: argparse.Namespace) -> int:
                             f"{args.stage} stage has no default reviews; only explicitly requested lenses will run.",
                             file=sys.stderr,
                         )
+                except SystemExit:
+                    raise
                 except Exception:
                     pass  # count failed — fall back to full reviews
         reviews_arg = required_reviews(
@@ -567,6 +594,7 @@ def command_checkpoint(args: argparse.Namespace) -> int:
                 if reverted:
                     print(f"reverted protected files: {', '.join(reverted)}", file=sys.stderr)
                 _advance_checkpoint_progress(args.slug, args.stage, pending_head_sha)
+                _persist_completed_artifact_sha(args.slug, args.stage, artifact_sha)
                 post_state = load_workflow_state(args.slug)
                 payload = _checkpoint_next_action_payload(args.slug, post_state, args.stage)
                 _persist_last_action_result(args.slug, payload)
@@ -598,6 +626,7 @@ def command_checkpoint(args: argparse.Namespace) -> int:
             print(f"reverted protected files: {', '.join(reverted)}", file=sys.stderr)
         record_checkpoint_fallback(args.slug, args.stage, fallback_reason)
         _advance_checkpoint_progress(args.slug, args.stage, pending_head_sha)
+        _persist_completed_artifact_sha(args.slug, args.stage, artifact_sha)
         heartbeat_set_activity("aggregating results")
         print(f"warning: fallback checkpoint path used for {args.stage} on {args.slug}: {fallback_reason}", file=sys.stderr)
         post_state = load_workflow_state(args.slug)
