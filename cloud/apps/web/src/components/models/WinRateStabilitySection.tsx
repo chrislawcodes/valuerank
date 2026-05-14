@@ -8,14 +8,11 @@ type SortKey =
   | 'label'
   | 'qualifyingVignetteCount'
   | 'avgDirectionalAgreement'
-  | 'stableShare'
-  | 'softLeanShare'
-  | 'tornShare'
-  | 'unstableShare';
+  | 'avgExactAgreement';
 type SortDir = 'asc' | 'desc';
 type Sort = { key: SortKey; dir: SortDir };
 
-const DEFAULT_SORT: Sort = { key: 'stableShare', dir: 'desc' };
+const DEFAULT_SORT: Sort = { key: 'avgDirectionalAgreement', dir: 'desc' };
 
 type WinRateStabilitySectionProps = {
   models: ModelsStabilityModelResult[];
@@ -35,10 +32,7 @@ function getSortValue(model: ModelsStabilityModelResult, key: SortKey): string |
     case 'label': return model.label;
     case 'qualifyingVignetteCount': return model.qualifyingVignetteCount;
     case 'avgDirectionalAgreement': return model.avgDirectionalAgreement ?? null;
-    case 'stableShare': return model.stableShare ?? null;
-    case 'softLeanShare': return model.softLeanShare ?? null;
-    case 'tornShare': return model.tornShare ?? null;
-    case 'unstableShare': return model.unstableShare ?? null;
+    case 'avgExactAgreement': return model.avgExactAgreement ?? null;
   }
 }
 
@@ -55,35 +49,6 @@ function sortModels(models: ModelsStabilityModelResult[], sort: Sort): ModelsSta
     const diff = (va as number) - (vb as number);
     return sort.dir === 'asc' ? diff : -diff;
   });
-}
-
-function StackedBar({
-  stableShare,
-  softLeanShare,
-  tornShare,
-  unstableShare,
-}: {
-  stableShare: number | null | undefined;
-  softLeanShare: number | null | undefined;
-  tornShare: number | null | undefined;
-  unstableShare: number | null | undefined;
-}) {
-  if (stableShare == null && softLeanShare == null && tornShare == null && unstableShare == null) {
-    return <span className="text-xs text-gray-400">—</span>;
-  }
-  const s = (stableShare ?? 0) * 100;
-  const sl = (softLeanShare ?? 0) * 100;
-  const t = (tornShare ?? 0) * 100;
-  const u = (unstableShare ?? 0) * 100;
-  const title = `Stable: ${s.toFixed(1)}% / Soft Lean: ${sl.toFixed(1)}% / Torn: ${t.toFixed(1)}% / Unstable: ${u.toFixed(1)}%`;
-  return (
-    <div className="flex h-4 w-full overflow-hidden rounded" title={title} aria-label={title}>
-      {s > 0 && <div className="bg-emerald-500" style={{ width: `${s}%` }} aria-hidden="true" />}
-      {sl > 0 && <div className="bg-sky-400" style={{ width: `${sl}%` }} aria-hidden="true" />}
-      {t > 0 && <div className="bg-amber-400" style={{ width: `${t}%` }} aria-hidden="true" />}
-      {u > 0 && <div className="bg-rose-400" style={{ width: `${u}%` }} aria-hidden="true" />}
-    </div>
-  );
 }
 
 function ColHeader({
@@ -151,11 +116,6 @@ export function WinRateStabilitySection({
     <section className="space-y-4 rounded-xl border border-gray-200 bg-white p-4 md:p-5">
       <div className="space-y-1">
         <h2 className="text-lg font-semibold text-gray-900">Response Consistency by Model</h2>
-        <p className="max-w-3xl text-sm text-gray-600">
-          How consistently each model responds when shown the same vignette condition twice. Stable = ≥80% directional
-          agreement; Soft Lean = moderate agreement with a clear lean; Torn = mixed or near-neutral; Unstable = wide
-          swing across conditions.
-        </p>
         {winRateMode === 'exc-neutral' && (
           <p className="text-sm text-amber-700">
             Consistency metrics include neutral outcomes and are not affected by the Exc. neutral mode.
@@ -190,50 +150,23 @@ export function WinRateStabilitySection({
                 Model
               </th>
               <ColHeader
-                label="Vignettes (N)"
-                tooltip="Number of qualifying vignettes with sufficient repeat data"
-                sortKey="qualifyingVignetteCount"
-                sort={sort}
-                onSort={setSort}
-              />
-              <ColHeader
-                label="Avg Dir Agree"
-                tooltip="Weighted average directional agreement across conditions — higher means more consistent"
+                label="Direction Agree"
+                tooltip="Share of responses choosing the same side (A or B) across repeated runs"
                 sortKey="avgDirectionalAgreement"
                 sort={sort}
                 onSort={setSort}
               />
-              <th
-                scope="col"
-                className="px-2 py-2 text-center text-[11px] font-semibold uppercase tracking-wide text-gray-500"
-              >
-                Distribution
-              </th>
               <ColHeader
-                label="Stable %"
-                tooltip="Share of conditions classified as Stable (≥80% directional agreement)"
-                sortKey="stableShare"
+                label="Exact Agree"
+                tooltip="Share of responses matching on both direction and strength (strongly vs. somewhat)"
+                sortKey="avgExactAgreement"
                 sort={sort}
                 onSort={setSort}
               />
               <ColHeader
-                label="Soft Lean %"
-                tooltip="Share classified as Soft Lean (moderate agreement with a directional lean)"
-                sortKey="softLeanShare"
-                sort={sort}
-                onSort={setSort}
-              />
-              <ColHeader
-                label="Torn %"
-                tooltip="Share classified as Torn (mixed signals or near-neutral)"
-                sortKey="tornShare"
-                sort={sort}
-                onSort={setSort}
-              />
-              <ColHeader
-                label="Unstable %"
-                tooltip="Share classified as Unstable (wide swing in responses across conditions)"
-                sortKey="unstableShare"
+                label="Vignettes (N)"
+                tooltip="Number of qualifying vignettes with sufficient repeat data"
+                sortKey="qualifyingVignetteCount"
                 sort={sort}
                 onSort={setSort}
               />
@@ -247,6 +180,12 @@ export function WinRateStabilitySection({
                 <tr key={model.modelId} className="border-b border-gray-100 hover:bg-gray-50">
                   <td className="whitespace-nowrap px-2 py-2 font-medium text-gray-900">{model.label}</td>
                   <td className="px-2 py-2 text-right font-mono text-gray-700">
+                    {pct(model.avgDirectionalAgreement)}
+                  </td>
+                  <td className="px-2 py-2 text-right font-mono text-gray-700">
+                    {pct(model.avgExactAgreement)}
+                  </td>
+                  <td className="px-2 py-2 text-right font-mono text-gray-700">
                     {model.qualifyingVignetteCount}
                     {isLowN && (
                       <span
@@ -257,45 +196,11 @@ export function WinRateStabilitySection({
                       </span>
                     )}
                   </td>
-                  <td className="px-2 py-2 text-right font-mono text-gray-700">
-                    {pct(model.avgDirectionalAgreement)}
-                  </td>
-                  <td className="min-w-[100px] px-2 py-2">
-                    <StackedBar
-                      stableShare={model.stableShare}
-                      softLeanShare={model.softLeanShare}
-                      tornShare={model.tornShare}
-                      unstableShare={model.unstableShare}
-                    />
-                  </td>
-                  <td className="px-2 py-2 text-right font-mono text-gray-700">{pct(model.stableShare)}</td>
-                  <td className="px-2 py-2 text-right font-mono text-gray-700">{pct(model.softLeanShare)}</td>
-                  <td className="px-2 py-2 text-right font-mono text-gray-700">{pct(model.tornShare)}</td>
-                  <td className="px-2 py-2 text-right font-mono text-gray-700">{pct(model.unstableShare)}</td>
                 </tr>
               );
             })}
           </tbody>
         </table>
-      </div>
-
-      <div className="flex flex-wrap gap-3 text-xs text-gray-600">
-        <span className="flex items-center gap-1">
-          <span className="inline-block h-3 w-3 rounded bg-emerald-500" aria-hidden="true" />
-          Stable
-        </span>
-        <span className="flex items-center gap-1">
-          <span className="inline-block h-3 w-3 rounded bg-sky-400" aria-hidden="true" />
-          Soft Lean
-        </span>
-        <span className="flex items-center gap-1">
-          <span className="inline-block h-3 w-3 rounded bg-amber-400" aria-hidden="true" />
-          Torn
-        </span>
-        <span className="flex items-center gap-1">
-          <span className="inline-block h-3 w-3 rounded bg-rose-400" aria-hidden="true" />
-          Unstable
-        </span>
       </div>
     </section>
   );

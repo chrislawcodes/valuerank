@@ -5,10 +5,7 @@ query ModelsWinRateStability($signature: String, $domainId: ID, $domainIds: [ID!
       label
       qualifyingVignetteCount
       avgDirectionalAgreement
-      stableShare
-      softLeanShare
-      tornShare
-      unstableShare
+      avgExactAgreement
     }
     skippedVignettes {
       definitionId

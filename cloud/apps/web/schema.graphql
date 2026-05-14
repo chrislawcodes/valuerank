@@ -1718,6 +1718,7 @@ type ModelsConfidenceValueResult {
 
 type ModelsStabilityModelResult {
   avgDirectionalAgreement: Float
+  avgExactAgreement: Float
   label: String!
   modelId: String!
   qualifyingVignetteCount: Int!
@@ -1741,6 +1742,7 @@ type ModelsStabilitySkippedVignette {
 
 type ModelsStabilityVignetteResult {
   avgDirectionalAgreement: Float
+  avgExactAgreement: Float
   classifiedConditionCount: Int!
   definitionId: String!
   softLeanShare: Float!
@@ -3310,6 +3312,7 @@ enum RunAnomalyType {
   INVALID_RESPONSE_FAILURE
   MODEL_TRANSCRIPT_SHORTFALL
   ORPHAN_TRANSCRIPT
+  RESUMMARIZE_FAILED
   SCHEDULED_COUNT_MISMATCH
   STRANDED_TRANSCRIPT
   SUMMARIZING_STALL

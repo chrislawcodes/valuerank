@@ -8,24 +8,18 @@ function makeModel(overrides: Partial<ModelsStabilityModelResult> & { modelId: s
   return {
     qualifyingVignetteCount: 10,
     avgDirectionalAgreement: 0.75,
-    stableShare: 0.5,
-    softLeanShare: 0.2,
-    tornShare: 0.2,
-    unstableShare: 0.1,
+    avgExactAgreement: 0.60,
     ...overrides,
   };
 }
 
-const MODEL_A = makeModel({ modelId: 'model-a', label: 'Model A', stableShare: 0.8, qualifyingVignetteCount: 10 });
-const MODEL_B = makeModel({ modelId: 'model-b', label: 'Model B', stableShare: 0.3, qualifyingVignetteCount: 6 });
+const MODEL_A = makeModel({ modelId: 'model-a', label: 'Model A', avgDirectionalAgreement: 0.8, qualifyingVignetteCount: 10 });
+const MODEL_B = makeModel({ modelId: 'model-b', label: 'Model B', avgDirectionalAgreement: 0.3, qualifyingVignetteCount: 6 });
 const MODEL_C = makeModel({
   modelId: 'model-c',
   label: 'Model C',
-  stableShare: null,
-  softLeanShare: null,
-  tornShare: null,
-  unstableShare: null,
   avgDirectionalAgreement: null,
+  avgExactAgreement: null,
   qualifyingVignetteCount: 0,
 });
 
@@ -41,12 +35,9 @@ describe('WinRateStabilitySection', () => {
     );
 
     expect(screen.getByRole('heading', { name: /response consistency by model/i })).toBeTruthy();
-    expect(screen.getByText(/vignettes \(n\)/i)).toBeTruthy();
-    expect(screen.getByText(/avg dir agree/i)).toBeTruthy();
-    expect(screen.getAllByText(/^stable %$/i).length).toBeGreaterThan(0);
-    expect(screen.getAllByText(/^soft lean %$/i).length).toBeGreaterThan(0);
-    expect(screen.getAllByText(/^torn %$/i).length).toBeGreaterThan(0);
-    expect(screen.getAllByText(/^unstable %$/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/vignettes \(n\)/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/direction agree/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/exact agree/i).length).toBeGreaterThan(0);
   });
 
   it('renders null when models list is empty and not fetching', () => {
@@ -129,7 +120,7 @@ describe('WinRateStabilitySection', () => {
     expect(screen.getByText(/normalization-failed/i)).toBeTruthy();
   });
 
-  it('sorts by stableShare descending by default', () => {
+  it('sorts by avgDirectionalAgreement descending by default', () => {
     render(
       <WinRateStabilitySection
         models={[MODEL_B, MODEL_A]}
@@ -156,12 +147,12 @@ describe('WinRateStabilitySection', () => {
       />,
     );
 
-    // Default: stableShare desc — Model A first
+    // Default: avgDirectionalAgreement desc — Model A first
     let rows = screen.getAllByRole('row');
     expect(rows[1]?.textContent).toMatch(/Model A/);
 
-    // Click Stable % again → asc
-    await user.click(screen.getByRole('button', { name: /sort by stable % ascending/i }));
+    // Click Direction Agree again → asc
+    await user.click(screen.getByRole('button', { name: /sort by direction agree ascending/i }));
     rows = screen.getAllByRole('row');
     expect(rows[1]?.textContent).toMatch(/Model B/);
   });
@@ -175,8 +166,8 @@ describe('WinRateStabilitySection', () => {
         errorMessage={null}
       />,
     );
-    // null shares render as —
+    // null values render as —
     const emDashes = screen.getAllByText('—');
-    expect(emDashes.length).toBeGreaterThanOrEqual(4);
+    expect(emDashes.length).toBeGreaterThanOrEqual(2);
   });
 });
