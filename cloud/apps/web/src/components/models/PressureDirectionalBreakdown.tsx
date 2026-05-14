@@ -127,7 +127,7 @@ export function PressureDirectionalBreakdown({ models }: Props) {
         <TableBody>
           {rows.map((row) => (
             <TableRow key={row.modelId}>
-              <TableCell className="font-medium text-gray-900">{row.label}</TableCell>
+              <TableCell className="whitespace-nowrap font-medium text-gray-900">{row.label}</TableCell>
               <TableCell
                 className={`text-right text-sm ${row.overallEffect < 0 ? 'text-red-700' : 'text-gray-900'}`}
               >
