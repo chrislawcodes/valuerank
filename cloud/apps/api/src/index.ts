@@ -2,7 +2,7 @@ import { createServer } from './server.js';
 import { config } from './config.js';
 import { createLogger } from '@valuerank/shared';
 import { startOrchestrator, stopOrchestrator } from './queue/index.js';
-import { queueStaleAnalysesOnStartup } from './services/analysis/domain-analysis-cache.js';
+import { queueStaleAnalysesOnStartup } from './services/analysis/domain-analysis-startup.js';
 
 const log = createLogger('api');
 

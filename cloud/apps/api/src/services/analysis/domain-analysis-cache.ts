@@ -37,7 +37,7 @@ import { DOMAIN_ANALYSIS_ALL_DOMAINS_SCOPE } from './domain-analysis-scope.js';
 
 const log = createLogger('analysis:domain-cache');
 
-async function getCurrentSnapshot(
+export async function getCurrentSnapshot(
   client: SnapshotClient,
   scope: DomainAnalysisScope,
   domainId: string,
@@ -586,6 +586,32 @@ export async function getDomainAnalysisResult(params: {
     }
   }
 
+  // For multi-domain scopes (DOMAIN_SET, ALL_DOMAINS) with no usable snapshot:
+  // queue async and return UPDATING immediately so the client can poll and show
+  // X/Y progress. A synchronous rebuild here would block the HTTP response for
+  // the full rebuild duration (can be minutes for large sets).
+  if (params.scope !== 'DOMAIN') {
+    const totalRuns = state.resolvedSignatureRuns.filteredSourceRunIds.length;
+    const queued = await queueDomainAnalysisRefresh({
+      scope: state.scope,
+      domainId: state.domain.id,
+      domainIds: state.scope === 'ALL_DOMAINS' ? undefined : state.domainIds,
+      signature: state.selectedSignature,
+      reason: 'cache-miss',
+    });
+    if (queued) {
+      return buildEmptyDomainAnalysisResult({
+        domainId: state.domain.id,
+        domainName: state.domain.name,
+        activeModels,
+        generatedAt: new Date(),
+        cacheStatus: DOMAIN_ANALYSIS_CACHE_STATUS.UPDATING,
+        unavailableReason: 'Building analysis for this domain combination. Refresh in a moment.',
+        refreshProgress: { completedRuns: 0, totalRuns },
+      });
+    }
+  }
+
   const refreshed = await refreshDomainAnalysisSnapshot({
     scope: state.scope,
     domainId: state.domain.id,
@@ -605,49 +631,7 @@ export async function getDomainAnalysisResult(params: {
   });
 }
 
-/**
- * On startup, queue background refreshes for any domain whose analysis snapshot is stale.
- * Runs non-blocking after the queue orchestrator is ready. Skips domains with no snapshot
- * (built on first page load) and domains whose rebuild is already in progress.
- */
-export async function queueStaleAnalysesOnStartup(): Promise<void> {
-  const domains = await db.domain.findMany({
-    select: { id: true },
-  });
 
-  let queued = 0;
-  for (const domain of domains) {
-    try {
-      const state = await prepareDomainAnalysisState({
-        scope: 'DOMAIN',
-        domainId: domain.id,
-        requestedSignature: null,
-      });
-
-      if (state.definitions.length === 0) continue;
-
-      const currentSnapshot = await getCurrentSnapshot(db, state.scope, domain.id, state.configSignature);
-      if (currentSnapshot == null) continue;
-
-      const parsedCurrent = parseSnapshotOutput(currentSnapshot.output);
-      if (parsedCurrent == null) continue; // rebuild already in progress
-
-      if (currentSnapshot.inputHash === state.inputHash) continue; // already fresh
-
-      const didQueue = await queueDomainAnalysisRefresh({
-        scope: state.scope,
-        domainId: domain.id,
-        signature: state.selectedSignature,
-        reason: 'startup-stale',
-      });
-      if (didQueue) queued += 1;
-    } catch (err) {
-      log.warn({ err, domainId: domain.id }, 'startup stale check failed for domain');
-    }
-  }
-
-  log.info({ queued, total: domains.length }, 'Startup domain analysis stale check complete');
-}
 
 /**
  * Read the pre-computed per-(definitionId::modelId::canonicalA::canonicalB::ownLevel::opponentLevel)
