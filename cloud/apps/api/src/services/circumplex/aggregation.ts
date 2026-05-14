@@ -16,9 +16,6 @@ export type CircumplexPairMatrix = CircumplexPairCell[][];
 type RunRow = {
   id: string;
   config: unknown;
-  status: string;
-  deletedAt: Date | null;
-  definitionId: string;
 };
 
 type TranscriptRow = {
@@ -139,22 +136,23 @@ export async function aggregatePairwiseWinRates(args: {
     where: {
       status: 'COMPLETED',
       deletedAt: null,
+      // Scope to the domain's definitions in SQL when provided, instead of
+      // loading every completed run's config JSONB and filtering in JS. Uses
+      // the Run.definitionId index.
+      ...(args.domainDefinitionIds != null
+        ? { definitionId: { in: [...args.domainDefinitionIds] } }
+        : {}),
     },
     select: {
       id: true,
       config: true,
-      status: true,
-      deletedAt: true,
-      definitionId: true,
     },
   })) as RunRow[];
 
   const scopedRunIds = runs
     .filter((run) => {
-      if (run.status !== 'COMPLETED' || run.deletedAt != null) return false;
       const config = run.config as { isAggregate?: boolean } | null;
       if (config?.isAggregate === true) return false;
-      if (args.domainDefinitionIds != null && !args.domainDefinitionIds.has(run.definitionId)) return false;
       return runMatchesSignature(run.config, args.signature);
     })
     .map((run) => run.id);

@@ -61,6 +61,30 @@ function buildTranscripts(fixture: TranscriptFixture[]): Array<Record<string, un
   }));
 }
 
+function installRunMock(): void {
+  // Mirror what Prisma does with the `where` clause: aggregation.ts now filters
+  // status / deletedAt / definitionId in SQL, so the mock must honor those
+  // instead of returning every run unconditionally.
+  mockDb.run.findMany.mockImplementation((args: {
+    where?: {
+      status?: string;
+      deletedAt?: null;
+      definitionId?: { in?: string[] };
+    };
+  }) => {
+    const where = args.where ?? {};
+    return Promise.resolve(
+      buildRuns().filter((run) => {
+        if (where.status != null && run.status !== where.status) return false;
+        if (where.deletedAt === null && run.deletedAt != null) return false;
+        const inList = where.definitionId?.in;
+        if (inList != null && !inList.includes(run.definitionId)) return false;
+        return true;
+      }),
+    );
+  });
+}
+
 function installDecisionMock(): void {
   resolveTranscriptDecisionModelMock.mockImplementation((input: {
     decisionMetadata: unknown;
@@ -93,12 +117,12 @@ function installDecisionMock(): void {
 beforeEach(() => {
   vi.clearAllMocks();
   runMatchesSignatureMock.mockImplementation((config: { signature?: string }, signature: string) => config.signature === signature);
+  installRunMock();
   installDecisionMock();
 });
 
 describe('aggregatePairwiseWinRates', () => {
   it('canonicalizes flipped transcripts to the same pairwise counts as unflipped ones', async () => {
-    mockDb.run.findMany.mockResolvedValue(buildRuns());
 
     const unflipped = buildTranscripts([
       { runId: 'run-good-a', modelId: 'model-1', orientationFlipped: false, direction: 'favor_first', scenarioId: 'sc-1' },
@@ -144,7 +168,6 @@ describe('aggregatePairwiseWinRates', () => {
   });
 
   it('returns an empty matrix for models with no matching transcripts', async () => {
-    mockDb.run.findMany.mockResolvedValue(buildRuns());
     mockDb.transcript.findMany.mockResolvedValue([]);
 
     const result = await aggregatePairwiseWinRates({
@@ -160,7 +183,6 @@ describe('aggregatePairwiseWinRates', () => {
   });
 
   it('averages win rates per vignette rather than pooling raw counts', async () => {
-    mockDb.run.findMany.mockResolvedValue(buildRuns());
 
     // Vignette sc-A: 3 wins for Self_Direction (favor_first), 0 losses → rate = 1.0
     // Vignette sc-B: 1 win for Self_Direction, 3 losses → rate = 0.25
@@ -192,7 +214,6 @@ describe('aggregatePairwiseWinRates', () => {
   });
 
   it('filters transcripts to runs belonging to the specified domain', async () => {
-    mockDb.run.findMany.mockResolvedValue(buildRuns());
 
     // run-good-a and run-good-b belong to def-1; run-other-domain belongs to def-other
     const transcripts = buildTranscripts([
