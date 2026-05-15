@@ -10,13 +10,16 @@
 // entirely. The tradeoff: a data change is served stale (as FRESH) until the
 // next warm rebuilds the snapshot — bounded by the TTL below.
 
-// 90 minutes: the warming crons run hourly, so this leaves a 30-minute buffer
-// for a late cron run before the fast path falls back to full validation.
+// 6 hours: the warming crons run hourly and the slow-path FRESH branch also
+// stamps lastValidatedAt, so any visit (or hourly warm) re-stamps the snapshot.
+// A wide TTL lets infrequent visitors (e.g. once per workday) still fast-path
+// across long idle periods. Worst-case staleness is still bounded by the
+// hourly warm — the TTL only matters if the cron stops running entirely.
 //
 // Disabled (0) under NODE_ENV=test so integration tests keep exercising the
 // full validation path — otherwise a test that mutates data and re-queries
 // would be served the stale cached snapshot.
-export const SNAPSHOT_FAST_PATH_TTL_MS = process.env.NODE_ENV === 'test' ? 0 : 90 * 60 * 1000;
+export const SNAPSHOT_FAST_PATH_TTL_MS = process.env.NODE_ENV === 'test' ? 0 : 6 * 60 * 60 * 1000;
 
 export function canFastPathSnapshot(
   snapshot: { lastValidatedAt: Date | null; codeVersion: string },
