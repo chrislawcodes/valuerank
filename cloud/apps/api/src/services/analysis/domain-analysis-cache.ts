@@ -62,7 +62,7 @@ export async function getCurrentSnapshot(
 // with a new synchronous rebuild — that creates a thundering-herd loop.
 const DOMAIN_ANALYSIS_BUILD_PROGRESS_FRESH_MS = 5 * 60 * 1000;
 
-function parseBuildProgress(raw: unknown): DomainAnalysisBuildProgress | null {
+export function parseBuildProgress(raw: unknown): DomainAnalysisBuildProgress | null {
   if (raw == null || typeof raw !== 'object' || Array.isArray(raw)) {
     return null;
   }
@@ -684,51 +684,3 @@ export async function getDomainAnalysisResult(params: {
 }
 
 
-/**
- * Read the pre-computed per-(definitionId::modelId::canonicalA::canonicalB::ownLevel::opponentLevel)
- * cell-level outcomes from the current domain-analysis snapshot. Returns null if no CURRENT
- * snapshot exists or if the snapshot pre-dates v1.12.0 (i.e. does not include `cellLevelOutcomes`).
- *
- * Used by the modelAgreementOnTradeoffs resolver to compute Cohen's kappa, percent
- * agreement, and divergence metrics with equal-weight aggregation.
- */
-export async function readCellLevelOutcomesFromSnapshot(
-  scope: DomainAnalysisScope,
-  domainId: string,
-  configSignature: string,
-): Promise<Record<string, { aChoices: number; bChoices: number; neutrals: number }> | null> {
-  const snapshot = await getCurrentSnapshot(db, scope, domainId, configSignature);
-  if (snapshot == null) return null;
-  const parsed = parseSnapshotOutput(snapshot.output);
-  return parsed?.cellLevelOutcomes ?? null;
-}
-
-export async function readModelAgreementSnapshotStateFromSnapshot(
-  scope: DomainAnalysisScope,
-  domainId: string,
-  configSignature: string,
-): Promise<{
-  cellLevelOutcomes: Record<string, { aChoices: number; bChoices: number; neutrals: number }> | null;
-  buildProgress: DomainAnalysisBuildProgress | null;
-  inputHash: string | null;
-} | null> {
-  const snapshot = await getCurrentSnapshot(db, scope, domainId, configSignature);
-  if (snapshot == null) {
-    return null;
-  }
-
-  const parsed = parseSnapshotOutput(snapshot.output);
-  if (parsed?.cellLevelOutcomes != null) {
-    return {
-      cellLevelOutcomes: parsed.cellLevelOutcomes,
-      buildProgress: null,
-      inputHash: snapshot.inputHash,
-    };
-  }
-
-  return {
-    cellLevelOutcomes: null,
-    buildProgress: parseBuildProgress(snapshot.output),
-    inputHash: snapshot.inputHash,
-  };
-}

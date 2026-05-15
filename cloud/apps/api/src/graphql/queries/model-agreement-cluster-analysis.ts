@@ -20,8 +20,8 @@ import { resolveSignatureRuns } from './domain/shared.js';
 import {
   getDomainAnalysisResult,
   queueDomainAnalysisRefresh,
-  readModelAgreementSnapshotStateFromSnapshot,
 } from '../../services/analysis/domain-analysis-cache.js';
+import { readModelAgreementSnapshotStateFromSnapshot } from '../../services/analysis/domain-analysis-snapshot-readers.js';
 import {
   normalizeDomainIds,
   resolveDomainAnalysisSelection,
