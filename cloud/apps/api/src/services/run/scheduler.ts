@@ -29,6 +29,7 @@ import { enqueueTopUpProbesSingleton } from '../../queue/handlers/top-up-probes.
 import { DEFAULT_JOB_OPTIONS } from '../../queue/types.js';
 import { getBoss } from '../../queue/boss.js';
 import { getQueueNameForModel } from '../parallelism/index.js';
+import { buildDomainAnalysisDomainSetId } from '../analysis/domain-analysis-scope.js';
 
 const log = createLogger('services:run:scheduler');
 
@@ -447,6 +448,128 @@ async function registerWinRateStabilityWarmingSchedule(): Promise<void> {
   }
 }
 
+// Cron format for the named (per-domain + minus-invasion) warming targets:
+// minute is per-target, hours are 6 AM / noon / 6 PM / midnight Pacific.
+// Anchored at 6 AM PT so the morning visit always lands on a fresh snapshot.
+const NAMED_WARM_CRON_HOURS = '0,6,12,18';
+const NAMED_WARM_TZ = 'America/Los_Angeles';
+// "Motivation for Invasion Choice" is the production name; match by fragment
+// so a minor rename (e.g. dropping the suffix) does not silently break warming.
+const MOTIVATION_INVASION_NAME_FRAGMENT = 'motivation for invasion';
+// Stability schedules offset from domain-analysis schedules by 30 min so the
+// two rebuilds for the same target do not run simultaneously.
+const NAMED_WARM_STABILITY_MINUTE_OFFSET = 30;
+
+type NamedWarmTarget = {
+  key: string;
+  scope: 'DOMAIN' | 'DOMAIN_SET';
+  domainId: string;          // canonical scope id (real domain id, or domain-set:<hash>)
+  domainIds: string[];       // per-domain: [domainId]; DOMAIN_SET: full list
+  minute: number;            // 0..59 stagger
+  label: string;             // human-readable for logs
+};
+
+async function registerNamedWarmingSchedules(): Promise<void> {
+  try {
+    const boss = getBoss();
+    const domains = await db.domain.findMany({
+      select: { id: true, name: true },
+      orderBy: { name: 'asc' },
+    });
+    if (domains.length === 0) {
+      log.info({}, 'No domains found — skipping named warming schedule registration');
+      return;
+    }
+
+    const targets: NamedWarmTarget[] = [];
+
+    domains.forEach((domain, idx) => {
+      targets.push({
+        key: `warm:domain:${domain.id}`,
+        scope: 'DOMAIN',
+        domainId: domain.id,
+        domainIds: [domain.id],
+        minute: idx,
+        label: `domain:${domain.name}`,
+      });
+    });
+
+    const invasionDomain = domains.find((domain) =>
+      domain.name.toLowerCase().includes(MOTIVATION_INVASION_NAME_FRAGMENT),
+    );
+    if (invasionDomain != null) {
+      const otherIds = domains
+        .filter((domain) => domain.id !== invasionDomain.id)
+        .map((domain) => domain.id);
+      if (otherIds.length >= 2) {
+        targets.push({
+          key: 'warm:minus-motivation-for-invasion',
+          scope: 'DOMAIN_SET',
+          domainId: buildDomainAnalysisDomainSetId(otherIds),
+          domainIds: otherIds,
+          // Park after all per-domain minutes (which span 0..N-1). With ~14
+          // domains today this gives a comfortable gap; clamp at 59 to be safe.
+          minute: Math.min(domains.length, 59),
+          label: 'minus-motivation-for-invasion',
+        });
+      }
+    } else {
+      log.warn(
+        { fragment: MOTIVATION_INVASION_NAME_FRAGMENT },
+        'No domain matched the motivation-for-invasion fragment — skipping minus-invasion warm',
+      );
+    }
+
+    for (const target of targets) {
+      const daCron = `${target.minute} ${NAMED_WARM_CRON_HOURS} * * *`;
+      const stabilityMinute = (target.minute + NAMED_WARM_STABILITY_MINUTE_OFFSET) % 60;
+      const stabilityCron = `${stabilityMinute} ${NAMED_WARM_CRON_HOURS} * * *`;
+
+      await boss
+        .unschedule('refresh_domain_analysis_snapshot', target.key)
+        .catch(() => undefined);
+      await boss.schedule(
+        'refresh_domain_analysis_snapshot',
+        daCron,
+        {
+          scope: target.scope,
+          domainId: target.domainId,
+          domainIds: target.domainIds,
+          signature: null,
+          reason: 'scheduled_warm',
+        },
+        { key: target.key, singletonKey: target.key, tz: NAMED_WARM_TZ },
+      );
+
+      await boss
+        .unschedule('refresh_win_rate_stability_snapshot', target.key)
+        .catch(() => undefined);
+      await boss.schedule(
+        'refresh_win_rate_stability_snapshot',
+        stabilityCron,
+        {
+          domainId: target.scope === 'DOMAIN' ? target.domainId : null,
+          domainIds: target.scope === 'DOMAIN_SET' ? target.domainIds : null,
+          signature: null,
+          reason: 'scheduled_warm',
+        },
+        { key: target.key, singletonKey: target.key, tz: NAMED_WARM_TZ },
+      );
+    }
+
+    log.info(
+      {
+        targetCount: targets.length,
+        cron: `_ ${NAMED_WARM_CRON_HOURS} * * *`,
+        tz: NAMED_WARM_TZ,
+      },
+      'Registered named (per-domain + minus-invasion) warming schedules',
+    );
+  } catch (error) {
+    log.error({ error }, 'Failed to register named warming schedules');
+  }
+}
+
 /**
  * Stops only the recovery interval (not the activity tracking).
  */
@@ -504,6 +627,7 @@ export async function startRecoveryScheduler(): Promise<void> {
   await registerAnalysisResultJanitorSchedule();
   await registerDomainAnalysisWarmingSchedule();
   await registerWinRateStabilityWarmingSchedule();
+  await registerNamedWarmingSchedules();
 
   // Run startup recovery first
   let hasActiveRuns = false;
