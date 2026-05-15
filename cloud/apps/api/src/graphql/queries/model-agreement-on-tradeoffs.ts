@@ -33,10 +33,8 @@ import {
 } from '../../services/model-agreement/math.js';
 import { resolveDomainAnalysisScopeDefinitions } from '../../services/analysis/domain-analysis-scope-loader.js';
 import { resolveSignatureRuns } from '../queries/domain/shared.js';
-import {
-  queueDomainAnalysisRefresh,
-  readModelAgreementSnapshotStateFromSnapshot,
-} from '../../services/analysis/domain-analysis-cache.js';
+import { queueDomainAnalysisRefresh } from '../../services/analysis/domain-analysis-cache.js';
+import { readModelAgreementSnapshotStateFromSnapshot } from '../../services/analysis/domain-analysis-snapshot-readers.js';
 import {
   normalizeDomainIds,
   resolveDomainAnalysisSelection,

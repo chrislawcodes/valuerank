@@ -34,6 +34,7 @@ import {
 } from './domain-analysis-snapshot-builder.js';
 import type { DomainAnalysisScope } from './domain-analysis-scope.js';
 import { DOMAIN_ANALYSIS_ALL_DOMAINS_SCOPE } from './domain-analysis-scope.js';
+import { canFastPathSnapshot } from './snapshot-fast-path.js';
 
 const log = createLogger('analysis:domain-cache');
 
@@ -61,7 +62,7 @@ export async function getCurrentSnapshot(
 // with a new synchronous rebuild — that creates a thundering-herd loop.
 const DOMAIN_ANALYSIS_BUILD_PROGRESS_FRESH_MS = 5 * 60 * 1000;
 
-function parseBuildProgress(raw: unknown): DomainAnalysisBuildProgress | null {
+export function parseBuildProgress(raw: unknown): DomainAnalysisBuildProgress | null {
   if (raw == null || typeof raw !== 'object' || Array.isArray(raw)) {
     return null;
   }
@@ -347,6 +348,13 @@ export async function refreshDomainAnalysisSnapshot(params: {
     },
   });
   if (existingFresh != null && parseSnapshotOutput(existingFresh.output) != null) {
+    // Stamp lastValidatedAt: the input hash still matches, so this snapshot is
+    // confirmed fresh as of now. This is what lets cache reads fast-path past
+    // prepareDomainAnalysisState until the next warm.
+    const revalidated = await db.assumptionAnalysisSnapshot.update({
+      where: { id: existingFresh.id },
+      data: { lastValidatedAt: new Date() },
+    });
     log.info({
       scope: params.scope,
       domainId: params.domainId,
@@ -355,7 +363,7 @@ export async function refreshDomainAnalysisSnapshot(params: {
       totalRefreshDurationMs: Date.now() - refreshStartedAt,
     }, 'refreshDomainAnalysisSnapshot: skipped — fresh snapshot already exists');
     return {
-      snapshot: existingFresh,
+      snapshot: revalidated,
       selectedSignature: state.selectedSignature,
       configSignature: state.configSignature,
     } as const;
@@ -455,6 +463,7 @@ export async function refreshDomainAnalysisSnapshot(params: {
       where: { id: progressSnapshot.id },
       data: {
         output,
+        lastValidatedAt: new Date(),
       },
     });
 
@@ -502,12 +511,50 @@ export async function refreshDomainAnalysisSnapshot(params: {
   }
 }
 
+/**
+ * Fast path: when the request pins a signature and the CURRENT snapshot for
+ * this scope was confirmed valid recently (by an hourly warm), serve straight
+ * from the snapshot and skip `prepareDomainAnalysisState` — which is several DB
+ * round-trips. Returns null when the fast path does not apply, so the caller
+ * falls through to full validation.
+ */
+async function tryDomainAnalysisFastPath(params: {
+  scope: DomainAnalysisScope;
+  domainId: string;
+  requestedSignature: string | null;
+}): Promise<DomainAnalysisResult | null> {
+  if (params.requestedSignature == null) return null;
+  const configSignature = normalizeSignature(params.requestedSignature);
+  const snapshot = await getCurrentSnapshot(db, params.scope, params.domainId, configSignature);
+  if (snapshot == null || !canFastPathSnapshot(snapshot, DOMAIN_ANALYSIS_SNAPSHOT_CODE_VERSION)) {
+    return null;
+  }
+  const parsed = parseSnapshotOutput(snapshot.output);
+  if (parsed == null) return null;
+
+  const activeModels = await db.llmModel.findMany({
+    where: { status: 'ACTIVE' },
+    select: { modelId: true, displayName: true, isDefault: true },
+  });
+  return buildDomainAnalysisResultFromSnapshot({
+    snapshot: parsed,
+    activeModels,
+    generatedAt: snapshot.createdAt,
+    cacheStatus: DOMAIN_ANALYSIS_CACHE_STATUS.FRESH,
+  });
+}
+
 export async function getDomainAnalysisResult(params: {
   scope: DomainAnalysisScope;
   domainId: string;
   domainIds?: string[];
   requestedSignature: string | null;
 }): Promise<DomainAnalysisResult> {
+  const fastResult = await tryDomainAnalysisFastPath(params);
+  if (fastResult != null) {
+    return fastResult;
+  }
+
   const state = await prepareDomainAnalysisState({
     scope: params.scope,
     domainId: params.domainId,
@@ -637,51 +684,3 @@ export async function getDomainAnalysisResult(params: {
 }
 
 
-/**
- * Read the pre-computed per-(definitionId::modelId::canonicalA::canonicalB::ownLevel::opponentLevel)
- * cell-level outcomes from the current domain-analysis snapshot. Returns null if no CURRENT
- * snapshot exists or if the snapshot pre-dates v1.12.0 (i.e. does not include `cellLevelOutcomes`).
- *
- * Used by the modelAgreementOnTradeoffs resolver to compute Cohen's kappa, percent
- * agreement, and divergence metrics with equal-weight aggregation.
- */
-export async function readCellLevelOutcomesFromSnapshot(
-  scope: DomainAnalysisScope,
-  domainId: string,
-  configSignature: string,
-): Promise<Record<string, { aChoices: number; bChoices: number; neutrals: number }> | null> {
-  const snapshot = await getCurrentSnapshot(db, scope, domainId, configSignature);
-  if (snapshot == null) return null;
-  const parsed = parseSnapshotOutput(snapshot.output);
-  return parsed?.cellLevelOutcomes ?? null;
-}
-
-export async function readModelAgreementSnapshotStateFromSnapshot(
-  scope: DomainAnalysisScope,
-  domainId: string,
-  configSignature: string,
-): Promise<{
-  cellLevelOutcomes: Record<string, { aChoices: number; bChoices: number; neutrals: number }> | null;
-  buildProgress: DomainAnalysisBuildProgress | null;
-  inputHash: string | null;
-} | null> {
-  const snapshot = await getCurrentSnapshot(db, scope, domainId, configSignature);
-  if (snapshot == null) {
-    return null;
-  }
-
-  const parsed = parseSnapshotOutput(snapshot.output);
-  if (parsed?.cellLevelOutcomes != null) {
-    return {
-      cellLevelOutcomes: parsed.cellLevelOutcomes,
-      buildProgress: null,
-      inputHash: snapshot.inputHash,
-    };
-  }
-
-  return {
-    cellLevelOutcomes: null,
-    buildProgress: parseBuildProgress(snapshot.output),
-    inputHash: snapshot.inputHash,
-  };
-}
