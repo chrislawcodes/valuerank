@@ -6,8 +6,8 @@
 - Slice 1b (Prisma model + types): complete (commit 8456d494)
 - Slice 1c (helpers + tests): complete (commit 4925a869)
 - Slice 2: complete (commit f3b7ac84)
-- Slice 3: not started
-- Slice 4: not started
+- Slice 3: complete (commit dd7b0783)
+- Slice 4: complete (commit dd7b0783 — bundled with slice 3)
 - API + web lint / test / build: not run
 - Production smoke (post-deploy): not run
 
@@ -106,13 +106,13 @@ Files in scope:
 - `cloud/apps/web/src/generated/graphql.ts` (regenerated via codegen)
 - `cloud/apps/api/tests/graphql/queries/model-agreement-on-tradeoffs.test.ts`
 
-- [ ] In `cloud/apps/api/src/graphql/types/model-agreement-on-tradeoffs.ts`, add three nullable freshness fields to the `ModelAgreementResult` Pothos object type: `snapshotComputedAt: DateTime` (nullable), `snapshotIsStale: Boolean` (nullable), `snapshotSource: ModelAgreementSnapshotSource` (the new enum from Slice 1's snapshot-types, exposed in GraphQL).
-- [ ] In `cloud/apps/api/src/graphql/queries/model-agreement-on-tradeoffs.ts`, determine `isCanonical` by comparing the requested model IDs (after canonical normalization) against the default model IDs for the signature using the existing `getModelsFromDatabase` helper. Call `getModelAgreementSnapshot` (Slice 2). On `CACHE_HIT` or `CACHE_HIT_STALE`, return the cached payload with the freshness fields populated. On `BUILDING`, return `pending: true` + the existing build-progress shape + freshness fields set to indicate `BUILDING`. On `null` (non-canonical), fall through to the existing live computation path and set `snapshotSource: 'LIVE_NON_CANONICAL'`, `snapshotComputedAt: null`, `snapshotIsStale: false`.
-- [ ] Find the web GraphQL operation that queries `modelAgreementOnTradeoffs` under `cloud/apps/web/src/api/operations/*.graphql` and add the three freshness fields to the selection set.
-- [ ] From `cloud/`, run `npm run codegen --workspace @valuerank/web`. Commit the regenerated `cloud/apps/web/src/generated/graphql.ts` in the same slice.
-- [ ] In the API resolver tests, assert: cache hit returns instantly with `snapshotSource: 'CACHE_HIT'` and populated `snapshotComputedAt`; cache miss for a canonical input returns `pending: true` with `snapshotSource: 'BUILDING'` and queues a refresh; stale snapshot returns the snapshot + `snapshotIsStale: true` + `snapshotSource: 'CACHE_HIT_STALE'` and queues a refresh; non-canonical input (one model swapped out of default) takes the live path with `snapshotSource: 'LIVE_NON_CANONICAL'` and does NOT enqueue a refresh.
-- [ ] In the API resolver tests, add a model-set-collision regression test: request with the canonical model set, then request with the same set but one model added — assert different snapshot rows are accessed (different keys), not a hit on the prior payload.
-- [ ] From `cloud/`, run `npm run lint --workspace @valuerank/api`, `npm run test --workspace @valuerank/api`, `npm run lint --workspace @valuerank/web`, `npm run build --workspace @valuerank/api`, and `npm run build --workspace @valuerank/web`. Fix all errors. No `any`, no `@ts-ignore`. Commit the slice.
+- [x] In `cloud/apps/api/src/graphql/types/model-agreement-on-tradeoffs.ts`, add three nullable freshness fields to the `ModelAgreementResult` Pothos object type: `snapshotComputedAt: DateTime` (nullable), `snapshotIsStale: Boolean` (nullable), `snapshotSource: ModelAgreementSnapshotSource` (the new enum from Slice 1's snapshot-types, exposed in GraphQL).
+- [x] In `cloud/apps/api/src/graphql/queries/model-agreement-on-tradeoffs.ts`, determine `isCanonical` by comparing the requested model IDs (after canonical normalization) against the default model IDs for the signature using the existing `getModelsFromDatabase` helper. Call `getModelAgreementSnapshot` (Slice 2). On `CACHE_HIT` or `CACHE_HIT_STALE`, return the cached payload with the freshness fields populated. On `BUILDING`, return `pending: true` + the existing build-progress shape + freshness fields set to indicate `BUILDING`. On `null` (non-canonical), fall through to the existing live computation path and set `snapshotSource: 'LIVE_NON_CANONICAL'`, `snapshotComputedAt: null`, `snapshotIsStale: false`.
+- [x] Find the web GraphQL operation that queries `modelAgreementOnTradeoffs` under `cloud/apps/web/src/api/operations/*.graphql` and add the three freshness fields to the selection set.
+- [x] From `cloud/`, run `npm run codegen --workspace @valuerank/web`. Commit the regenerated `cloud/apps/web/src/generated/graphql.ts` in the same slice.
+- [x] In the API resolver tests, assert: cache hit returns instantly with `snapshotSource: 'CACHE_HIT'` and populated `snapshotComputedAt`; cache miss for a canonical input returns `pending: true` with `snapshotSource: 'BUILDING'` and queues a refresh; stale snapshot returns the snapshot + `snapshotIsStale: true` + `snapshotSource: 'CACHE_HIT_STALE'` and queues a refresh; non-canonical input (one model swapped out of default) takes the live path with `snapshotSource: 'LIVE_NON_CANONICAL'` and does NOT enqueue a refresh.
+- [x] In the API resolver tests, add a model-set-collision regression test: request with the canonical model set, then request with the same set but one model added — assert different snapshot rows are accessed (different keys), not a hit on the prior payload.
+- [x] From `cloud/`, run `npm run lint --workspace @valuerank/api`, `npm run test --workspace @valuerank/api`, `npm run lint --workspace @valuerank/web`, `npm run build --workspace @valuerank/api`, and `npm run build --workspace @valuerank/web`. Fix all errors. No `any`, no `@ts-ignore`. Commit the slice.
 - [CHECKPOINT]
 
 ## Slice 4: Web UI freshness chip
@@ -124,9 +124,9 @@ Files in scope:
 - `cloud/apps/web/src/components/models/ModelAgreementSection.tsx`
 - `cloud/apps/web/tests/components/ModelAgreementSection.test.tsx`
 
-- [ ] In `cloud/apps/web/src/components/models/ModelAgreementSection.tsx`, read `snapshotComputedAt` and `snapshotSource` from the existing `modelAgreementOnTradeoffs` query result. Render a small "Cached as of {timestamp}" chip near the section header — visible only when `snapshotSource` is `CACHE_HIT` or `CACHE_HIT_STALE`. When `CACHE_HIT_STALE`, append "(refreshing)". Match the styling of the existing cluster-cache freshness chip on the Domain Analysis page (search for that chip's styling and reuse the same component or class set).
-- [ ] In `ModelAgreementSection.test.tsx`, assert: chip renders with the expected timestamp and label on `CACHE_HIT`; chip shows "(refreshing)" on `CACHE_HIT_STALE`; chip is hidden when `snapshotSource` is `BUILDING`; chip is hidden when `snapshotSource` is `LIVE_NON_CANONICAL`.
-- [ ] From `cloud/`, run `npm run lint --workspace @valuerank/web`, `npm run test --workspace @valuerank/web`, and `npm run build --workspace @valuerank/web`. Fix all errors. No `any`, no `@ts-ignore`. Commit the slice.
+- [x] In `cloud/apps/web/src/components/models/ModelAgreementSection.tsx`, read `snapshotComputedAt` and `snapshotSource` from the existing `modelAgreementOnTradeoffs` query result. Render a small "Cached as of {timestamp}" chip near the section header — visible only when `snapshotSource` is `CACHE_HIT` or `CACHE_HIT_STALE`. When `CACHE_HIT_STALE`, append "(refreshing)". Match the styling of the existing cluster-cache freshness chip on the Domain Analysis page (search for that chip's styling and reuse the same component or class set).
+- [x] In `ModelAgreementSection.test.tsx`, assert: chip renders with the expected timestamp and label on `CACHE_HIT`; chip shows "(refreshing)" on `CACHE_HIT_STALE`; chip is hidden when `snapshotSource` is `BUILDING`; chip is hidden when `snapshotSource` is `LIVE_NON_CANONICAL`.
+- [x] From `cloud/`, run `npm run lint --workspace @valuerank/web`, `npm run test --workspace @valuerank/web`, and `npm run build --workspace @valuerank/web`. Fix all errors. No `any`, no `@ts-ignore`. Commit the slice.
 - [CHECKPOINT]
 
 ## Verification Plan
