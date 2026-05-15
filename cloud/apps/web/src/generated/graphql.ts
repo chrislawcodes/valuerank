@@ -1537,10 +1537,19 @@ export type ModelAgreementResult = {
   models: Array<ModelInfo>;
   pairwiseAgreementMatrix: Array<PairwiseAgreementRow>;
   pending: Scalars['Boolean']['output'];
+  snapshotComputedAt?: Maybe<Scalars['DateTime']['output']>;
+  snapshotIsStale?: Maybe<Scalars['Boolean']['output']>;
+  snapshotSource?: Maybe<ModelAgreementSnapshotSource>;
   tiedCells: Scalars['Int']['output'];
   trialConsistency: Array<ModelTrialConsistency>;
   unavailableModels: Array<UnavailableModelInfo>;
 };
+
+export type ModelAgreementSnapshotSource =
+  | 'BUILDING'
+  | 'CACHE_HIT'
+  | 'CACHE_HIT_STALE'
+  | 'LIVE_NON_CANONICAL';
 
 /** Cost estimate for a single model in a run */
 export type ModelCostEstimate = {
@@ -5069,7 +5078,7 @@ export type ModelAgreementOnTradeoffsQueryVariables = Exact<{
 }>;
 
 
-export type ModelAgreementOnTradeoffsQuery = { __typename?: 'Query', modelAgreementOnTradeoffs: { __typename?: 'ModelAgreementResult', pending: boolean, excludedNonBinaryCells: number, tiedCells: number, buildProgress?: { __typename?: 'ModelAgreementBuildProgress', completedRuns: number, totalRuns: number, currentRunId?: string | null, updatedAt: string } | null, models: Array<{ __typename?: 'ModelInfo', modelId: string, label: string }>, unavailableModels: Array<{ __typename?: 'UnavailableModelInfo', modelId: string, label: string, reason: string }>, pairwiseAgreementMatrix: Array<{ __typename?: 'PairwiseAgreementRow', modelAId: string, modelALabel: string, modelBId: string, modelBLabel: string, totalCells: number, percentAgreement?: number | null, cohensKappa?: number | null, kappaInterpretation?: string | null, meanAbsoluteDivergence?: number | null, cohensKappaConfidenceLow?: number | null, cohensKappaConfidenceHigh?: number | null, cohensKappaConfidenceIsSymmetric: boolean }>, trialConsistency: Array<{ __typename?: 'ModelTrialConsistency', modelId: string, modelLabel: string, cellsObserved: number, meanTrialConsistency?: number | null, noisy: boolean }> } };
+export type ModelAgreementOnTradeoffsQuery = { __typename?: 'Query', modelAgreementOnTradeoffs: { __typename?: 'ModelAgreementResult', pending: boolean, snapshotComputedAt?: string | null, snapshotIsStale?: boolean | null, snapshotSource?: ModelAgreementSnapshotSource | null, excludedNonBinaryCells: number, tiedCells: number, buildProgress?: { __typename?: 'ModelAgreementBuildProgress', completedRuns: number, totalRuns: number, currentRunId?: string | null, updatedAt: string } | null, models: Array<{ __typename?: 'ModelInfo', modelId: string, label: string }>, unavailableModels: Array<{ __typename?: 'UnavailableModelInfo', modelId: string, label: string, reason: string }>, pairwiseAgreementMatrix: Array<{ __typename?: 'PairwiseAgreementRow', modelAId: string, modelALabel: string, modelBId: string, modelBLabel: string, totalCells: number, percentAgreement?: number | null, cohensKappa?: number | null, kappaInterpretation?: string | null, meanAbsoluteDivergence?: number | null, cohensKappaConfidenceLow?: number | null, cohensKappaConfidenceHigh?: number | null, cohensKappaConfidenceIsSymmetric: boolean }>, trialConsistency: Array<{ __typename?: 'ModelTrialConsistency', modelId: string, modelLabel: string, cellsObserved: number, meanTrialConsistency?: number | null, noisy: boolean }> } };
 
 export type ModelPairDivergenceBreakdownQueryVariables = Exact<{
   modelAId: Scalars['ID']['input'];
@@ -7776,6 +7785,9 @@ export const ModelAgreementOnTradeoffsDocument = gql`
       currentRunId
       updatedAt
     }
+    snapshotComputedAt
+    snapshotIsStale
+    snapshotSource
     excludedNonBinaryCells
     tiedCells
     models {

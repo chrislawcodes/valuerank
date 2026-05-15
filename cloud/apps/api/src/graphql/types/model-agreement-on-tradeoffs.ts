@@ -1,4 +1,5 @@
 import { builder } from '../builder.js';
+import type { ModelAgreementSnapshotSource } from '../../services/analysis/model-agreement-snapshot/snapshot-types.js';
 
 export type ModelInfoShape = {
   modelId: string;
@@ -44,6 +45,9 @@ export type ModelAgreementBuildProgressShape = {
 export type ModelAgreementResultShape = {
   pending: boolean;
   buildProgress: ModelAgreementBuildProgressShape | null;
+  snapshotComputedAt?: Date | null;
+  snapshotIsStale?: boolean | null;
+  snapshotSource?: ModelAgreementSnapshotSource | null;
   models: ModelInfoShape[];
   unavailableModels: UnavailableModelInfoShape[];
   excludedNonBinaryCells: number;
@@ -79,6 +83,11 @@ const ModelAgreementBuildProgressRef = builder.objectRef<ModelAgreementBuildProg
 export const ModelAgreementResultRef = builder.objectRef<ModelAgreementResultShape>('ModelAgreementResult');
 const ValuePairDivergenceRef = builder.objectRef<ValuePairDivergenceShape>('ValuePairDivergence');
 export const PairDivergenceBreakdownRef = builder.objectRef<PairDivergenceBreakdownShape>('PairDivergenceBreakdown');
+
+const ModelAgreementSnapshotSourceRef = builder.enumType('ModelAgreementSnapshotSource', {
+  values: ['CACHE_HIT', 'CACHE_HIT_STALE', 'LIVE_NON_CANONICAL', 'BUILDING'] as const,
+  description: 'Freshness source for the model agreement snapshot',
+});
 
 builder.objectType(ModelInfoRef, {
   fields: (t) => ({
@@ -135,6 +144,9 @@ builder.objectType(ModelAgreementResultRef, {
   fields: (t) => ({
     pending: t.exposeBoolean('pending'),
     buildProgress: t.expose('buildProgress', { type: ModelAgreementBuildProgressRef, nullable: true }),
+    snapshotComputedAt: t.expose('snapshotComputedAt', { type: 'DateTime', nullable: true }),
+    snapshotIsStale: t.exposeBoolean('snapshotIsStale', { nullable: true }),
+    snapshotSource: t.expose('snapshotSource', { type: ModelAgreementSnapshotSourceRef, nullable: true }),
     models: t.expose('models', { type: [ModelInfoRef] }),
     unavailableModels: t.expose('unavailableModels', { type: [UnavailableModelInfoRef] }),
     excludedNonBinaryCells: t.exposeInt('excludedNonBinaryCells'),

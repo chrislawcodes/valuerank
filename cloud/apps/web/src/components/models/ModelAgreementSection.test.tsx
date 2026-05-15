@@ -5,9 +5,34 @@ import { useModelAgreementOnTradeoffsQuery } from '../../generated/graphql';
 
 vi.mock('../../generated/graphql', () => ({
   useModelAgreementOnTradeoffsQuery: vi.fn(),
+  useModelPairDivergenceBreakdownQuery: vi.fn(() => [
+    {
+      data: undefined,
+      fetching: false,
+      error: undefined,
+    },
+    vi.fn(),
+  ]),
 }));
 
 const mockedUseModelAgreementOnTradeoffsQuery = vi.mocked(useModelAgreementOnTradeoffsQuery);
+
+function cachedAgreement(snapshotSource: 'CACHE_HIT' | 'CACHE_HIT_STALE') {
+  return {
+    __typename: 'ModelAgreementResult',
+    pending: false,
+    snapshotComputedAt: '2026-05-01T12:00:00.000Z',
+    snapshotIsStale: snapshotSource === 'CACHE_HIT_STALE',
+    snapshotSource,
+    buildProgress: null,
+    excludedNonBinaryCells: 0,
+    tiedCells: 0,
+    models: [],
+    unavailableModels: [],
+    pairwiseAgreementMatrix: [],
+    trialConsistency: [],
+  } as const;
+}
 
 describe('ModelAgreementSection', () => {
   beforeEach(() => {
@@ -111,5 +136,54 @@ describe('ModelAgreementSection', () => {
         content.includes('Model agreement query failed (scope=ALL_DOMAINS, domainId=all, signature=vnewtd, modelCount=2): Request failed (path=modelAgreementOnTradeoffs, code=BAD_USER_INPUT, errorId=err-123)'),
       ),
     ).toBeTruthy();
+  });
+
+  it('shows the cached freshness chip on a cache hit', () => {
+    mockedUseModelAgreementOnTradeoffsQuery.mockReturnValue([
+      {
+        data: {
+          modelAgreementOnTradeoffs: cachedAgreement('CACHE_HIT'),
+        },
+        fetching: false,
+        error: undefined,
+      },
+      vi.fn(),
+    ] as unknown as ReturnType<typeof useModelAgreementOnTradeoffsQuery>);
+
+    render(
+      <ModelAgreementSection
+        modelIds={['model-a', 'model-b']}
+        scope="ALL_DOMAINS"
+        domainId={null}
+        signature="vnewtd"
+      />,
+    );
+
+    expect(screen.getByText('Cached as of May 1, 2026 12:00 PM UTC')).toBeTruthy();
+    expect(screen.queryByText('(refreshing)')).toBeNull();
+  });
+
+  it('shows refreshing on a stale cache hit', () => {
+    mockedUseModelAgreementOnTradeoffsQuery.mockReturnValue([
+      {
+        data: {
+          modelAgreementOnTradeoffs: cachedAgreement('CACHE_HIT_STALE'),
+        },
+        fetching: false,
+        error: undefined,
+      },
+      vi.fn(),
+    ] as unknown as ReturnType<typeof useModelAgreementOnTradeoffsQuery>);
+
+    render(
+      <ModelAgreementSection
+        modelIds={['model-a', 'model-b']}
+        scope="ALL_DOMAINS"
+        domainId={null}
+        signature="vnewtd"
+      />,
+    );
+
+    expect(screen.getByText('Cached as of May 1, 2026 12:00 PM UTC (refreshing)')).toBeTruthy();
   });
 });

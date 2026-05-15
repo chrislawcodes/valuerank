@@ -1,28 +1,21 @@
 import { ValidationError } from '@valuerank/shared';
+import { db } from '@valuerank/db';
 import { builder } from '../builder.js';
 import { getModelsFromDatabase } from '../../config/models.js';
+import { getBoss } from '../../queue/boss.js';
 import {
   ModelAgreementResultRef,
   PairDivergenceBreakdownRef,
   type ModelAgreementResultShape,
   type PairDivergenceBreakdownShape,
-  type ModelTrialConsistencyShape,
-  type PairwiseAgreementRowShape,
   type ValuePairDivergenceShape,
 } from '../types/model-agreement-on-tradeoffs.js';
 import {
-  bootstrapKappaConfidence,
-  buildEmptyAgreementResult,
   buildEmptyPairBreakdown,
+  buildEmptyAgreementResult,
   buildPositionCells,
-  buildSelectedModels,
-  buildUnavailableModelInfo,
-  collectComparableCells,
   computeProportionA,
-  groupCellsByVignette,
   normalizeModelIds,
-  summarizePairCells,
-  summarizeTrialConsistency,
   type CellOutcome,
   type ComparableCell,
   type CellChoice,
@@ -31,10 +24,12 @@ import {
   equalWeightAggregate,
   isTied,
 } from '../../services/model-agreement/math.js';
+import { computeModelAgreement } from '../../services/model-agreement/compute.js';
 import { resolveDomainAnalysisScopeDefinitions } from '../../services/analysis/domain-analysis-scope-loader.js';
 import { resolveSignatureRuns } from '../queries/domain/shared.js';
 import { queueDomainAnalysisRefresh } from '../../services/analysis/domain-analysis-cache.js';
 import { readModelAgreementSnapshotStateFromSnapshot } from '../../services/analysis/domain-analysis-snapshot-readers.js';
+import { getModelAgreementSnapshot } from '../../services/analysis/model-agreement-snapshot/snapshot-cache.js';
 import {
   normalizeDomainIds,
   resolveDomainAnalysisSelection,
@@ -42,10 +37,36 @@ import {
 } from '../../services/analysis/domain-analysis-scope.js';
 import type { Context } from '../context.js';
 
-const AGREEMENT_REFRESH_REASON = 'model-agreement-on-tradeoffs-page-load-missing';
 const DRILLDOWN_REFRESH_REASON = 'model-pair-divergence-breakdown-missing';
-const NON_BINARY_CELL_FALLBACK_COUNT = 0;
-const KAPPA_BOOTSTRAP_ITERATIONS = 1000;
+
+function sameModelSelection(left: readonly string[], right: readonly string[]): boolean {
+  if (left.length !== right.length) {
+    return false;
+  }
+  return left.every((value, index) => value === right[index]);
+}
+
+function attachFreshnessFields(
+  result: ModelAgreementResultShape,
+  freshness: {
+    snapshotComputedAt: Date | null;
+    snapshotIsStale: boolean | null;
+    snapshotSource: ModelAgreementResultShape['snapshotSource'];
+  },
+): ModelAgreementResultShape {
+  return {
+    ...result,
+    ...freshness,
+  };
+}
+
+function buildBuildingAgreementResult(): ModelAgreementResultShape {
+  return attachFreshnessFields(buildEmptyAgreementResult(true), {
+    snapshotComputedAt: null,
+    snapshotIsStale: false,
+    snapshotSource: 'BUILDING',
+  });
+}
 
 
 async function resolveAgreementScope(params: {
@@ -141,12 +162,12 @@ export async function resolveModelAgreementOnTradeoffs(
   if (scopeValue !== 'DOMAIN' && scopeValue !== 'ALL_DOMAINS' && scopeValue !== 'DOMAIN_SET') {
     throw new ValidationError(`Unsupported scope: ${scopeValue}`);
   }
-  const domainIds = normalizeDomainIds((args.domainIds ?? []).map(String));
+
   const domainId = args.domainId != null ? String(args.domainId).trim() : null;
   const selection = resolveDomainAnalysisSelection({
     scope: scopeValue,
     domainId,
-    domainIds,
+    domainIds: normalizeDomainIds((args.domainIds ?? []).map(String)),
   });
   if (scopeValue === 'DOMAIN' && selection.scope !== 'DOMAIN') {
     throw new ValidationError('domainId is required when scope is DOMAIN');
@@ -164,121 +185,59 @@ export async function resolveModelAgreementOnTradeoffs(
   }
 
   const activeModels = await getModelsFromDatabase({ activeOnly: true, availableOnly: false });
-  const labelByModelId = new Map(activeModels.map((model) => [model.modelId, model.displayName] as const));
-  const selectedModels = buildSelectedModels(selectedModelIds, labelByModelId);
-  const selectedModelIdSet = new Set(selectedModels.map((model) => model.modelId));
+  const defaultModelIds = normalizeModelIds(activeModels.filter((model) => model.isDefault).map((model) => model.modelId));
+  const isCanonical = sameModelSelection(selectedModelIds, defaultModelIds);
 
-  await resolveAgreementScope({
-    scope,
-    domainId: selection.domainId,
-    domainIds: selection.domainIds,
-    signature,
-  });
+  if (isCanonical) {
+    const snapshotQueue = {
+      send: async (
+        name: string,
+        data: Parameters<ReturnType<typeof getBoss>['send']>[1],
+        options?: Parameters<ReturnType<typeof getBoss>['send']>[2],
+      ) => getBoss().send(name, data, options),
+    };
+    const snapshotResult = await getModelAgreementSnapshot(
+      db,
+      snapshotQueue,
+      {
+        scope,
+        domainId: selection.domainId,
+        domainIds: selection.domainIds,
+        signature,
+        modelIds: selectedModelIds,
+        isCanonical: true,
+      },
+    );
 
-  const snapshotResult = await readAgreementSnapshot({
-    scope,
-    domainId: selection.domainId,
-    domainIds: selection.domainIds,
-    signature,
-    refreshReason: AGREEMENT_REFRESH_REASON,
-    ctx,
-  });
-  if (snapshotResult.snapshot == null) {
-    return buildEmptyAgreementResult(snapshotResult.queued, snapshotResult.buildProgress);
-  }
-
-  const { positionCells, cellsObservedByModelId } = buildPositionCells(snapshotResult.snapshot, selectedModelIdSet);
-  const unavailableModels = selectedModels
-    .filter((model) => (cellsObservedByModelId.get(model.modelId) ?? 0) === 0)
-    .map(buildUnavailableModelInfo);
-  const availableModels = selectedModels.filter((model) => (cellsObservedByModelId.get(model.modelId) ?? 0) > 0);
-
-  const pairwiseAgreementMatrix: PairwiseAgreementRowShape[] = [];
-  let tiedCells = 0;
-
-  for (let leftIndex = 0; leftIndex < availableModels.length; leftIndex += 1) {
-    for (let rightIndex = leftIndex + 1; rightIndex < availableModels.length; rightIndex += 1) {
-      const modelA = availableModels[leftIndex]!;
-      const modelB = availableModels[rightIndex]!;
-      const { cells, tiedCells: pairTiedCells } = collectComparableCells({
-        positionCells,
-        modelAId: modelA.modelId,
-        modelBId: modelB.modelId,
-      });
-      tiedCells += pairTiedCells;
-      const metrics = summarizePairCells(cells);
-      const cellsByVignette = groupCellsByVignette(cells);
-      const ci = await bootstrapKappaConfidence(cellsByVignette, metrics.cohensKappa, KAPPA_BOOTSTRAP_ITERATIONS);
-
-      pairwiseAgreementMatrix.push({
-        modelAId: modelA.modelId,
-        modelALabel: modelA.label,
-        modelBId: modelB.modelId,
-        modelBLabel: modelB.label,
-        totalCells: metrics.totalCells,
-        percentAgreement: metrics.percentAgreement,
-        cohensKappa: metrics.cohensKappa,
-        kappaInterpretation: metrics.kappaInterpretation,
-        meanAbsoluteDivergence: metrics.meanAbsoluteDivergence,
-        cohensKappaConfidenceLow: ci.low,
-        cohensKappaConfidenceHigh: ci.high,
-        cohensKappaConfidenceIsSymmetric: ci.isSymmetric,
+    if (snapshotResult != null) {
+      if (snapshotResult.source === 'BUILDING') {
+        return buildBuildingAgreementResult();
+      }
+      const cachedPayload = snapshotResult.payload;
+      if (cachedPayload == null) {
+        return buildBuildingAgreementResult();
+      }
+      return attachFreshnessFields(cachedPayload, {
+        snapshotComputedAt: snapshotResult.snapshotComputedAt,
+        snapshotIsStale: snapshotResult.source === 'CACHE_HIT_STALE',
+        snapshotSource: snapshotResult.source,
       });
     }
   }
 
-  pairwiseAgreementMatrix.sort((left, right) => {
-    const leftKey = `${left.modelALabel}::${left.modelBLabel}`;
-    const rightKey = `${right.modelALabel}::${right.modelBLabel}`;
-    return leftKey.localeCompare(rightKey);
+  const liveResult = await computeModelAgreement(db, {
+    modelIds: selectedModelIds,
+    domainId: selection.domainId,
+    domainIds: selection.domainIds,
+    scope,
+    signature,
+  }, { log: ctx.log });
+
+  return attachFreshnessFields(liveResult, {
+    snapshotComputedAt: null,
+    snapshotIsStale: false,
+    snapshotSource: 'LIVE_NON_CANONICAL',
   });
-
-  const trialConsistency: ModelTrialConsistencyShape[] = availableModels
-    .map((model) => {
-      const summary = summarizeTrialConsistency({
-        positionCells,
-        modelId: model.modelId,
-      });
-      return {
-        modelId: model.modelId,
-        modelLabel: model.label,
-        cellsObserved: summary.cellsObserved,
-        meanTrialConsistency: summary.meanTrialConsistency,
-        noisy:
-          summary.meanTrialConsistency != null
-          && summary.meanTrialConsistency < 0.7
-          && summary.cellsObserved >= 5,
-      };
-    })
-    .sort((left, right) => {
-      const leftKey = `${left.modelLabel}::${left.modelId}`;
-      const rightKey = `${right.modelLabel}::${right.modelId}`;
-      return leftKey.localeCompare(rightKey);
-    });
-
-  ctx.log.debug(
-    {
-      scope,
-      domainId: selection.domainId,
-      domainIds: selection.domainIds,
-      signature,
-      selectedModelCount: selectedModels.length,
-      availableModelCount: availableModels.length,
-      pairCount: pairwiseAgreementMatrix.length,
-    },
-    'Computed model agreement on tradeoffs report',
-  );
-
-  return {
-    pending: false,
-    buildProgress: null,
-    models: availableModels,
-    unavailableModels,
-    excludedNonBinaryCells: NON_BINARY_CELL_FALLBACK_COUNT,
-    tiedCells,
-    pairwiseAgreementMatrix,
-    trialConsistency,
-  };
 }
 
 export async function resolveModelPairDivergenceBreakdown(

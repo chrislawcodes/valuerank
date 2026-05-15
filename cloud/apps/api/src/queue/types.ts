@@ -20,7 +20,10 @@ export type JobType =
   | 'refresh_domain_analysis_snapshot'
   | 'refresh_pressure_sensitivity_snapshot'
   | 'refresh_win_rate_stability_snapshot'
+  | 'refresh_model_agreement_snapshot'
   | 'start_domain_launch';
+
+export const REFRESH_MODEL_AGREEMENT_SNAPSHOT_JOB = 'refresh_model_agreement_snapshot';
 
 // Job data interfaces
 export type ProbeScenarioJobData = {
@@ -109,6 +112,15 @@ export type RefreshWinRateStabilitySnapshotJobData = {
   reason: string;
 };
 
+export type RefreshModelAgreementSnapshotJobData = {
+  scope: 'DOMAIN' | 'ALL_DOMAINS' | 'DOMAIN_SET';
+  domainId: string | null;
+  domainIds: string[];
+  modelIds: string[];
+  signature: string;
+  reason: string;
+};
+
 export type StartDomainLaunchJobData = {
   domainEvaluationId: string;
 };
@@ -131,6 +143,7 @@ export type JobData =
   | RefreshDomainAnalysisSnapshotJobData
   | RefreshPressureSensitivitySnapshotJobData
   | RefreshWinRateStabilitySnapshotJobData
+  | RefreshModelAgreementSnapshotJobData
   | StartDomainLaunchJobData;
 
 // Job options interface
@@ -223,6 +236,12 @@ export const DEFAULT_JOB_OPTIONS: Record<JobType, JobOptions> = {
     retryDelay: 10,
     retryBackoff: true,
     expireInSeconds: 600, // 10 minutes — bounded by aggregate-run output reads
+  },
+  'refresh_model_agreement_snapshot': {
+    retryLimit: 2,
+    retryDelay: 10,
+    retryBackoff: true,
+    expireInSeconds: 600, // 10 minutes — model agreement build matches win-rate stability timeout
   },
   'start_domain_launch': {
     retryLimit: 0, // Idempotency check inside handler covers re-entry

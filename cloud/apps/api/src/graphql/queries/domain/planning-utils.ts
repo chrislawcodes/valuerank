@@ -64,7 +64,7 @@ export type TrialRunStatusRow = {
   modelStatuses: TrialRunModelStatus[];
 };
 
-function formatRunSignature(config: unknown): string {
+export function formatRunSignature(config: unknown): string {
   const runConfig = config as {
     definitionSnapshot?: {
       _meta?: { definitionVersion?: unknown };

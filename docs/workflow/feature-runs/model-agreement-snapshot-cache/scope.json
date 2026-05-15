@@ -1,0 +1,9 @@
+{
+  "paths": [
+    "cloud"
+  ],
+  "allowed_dirty_paths": [
+    "cloud",
+    "docs/workflow/feature-runs/model-agreement-snapshot-cache"
+  ]
+}

@@ -1606,12 +1606,22 @@ type ModelAgreementBuildProgress {
   updatedAt: String!
 }
 
+enum ModelAgreementSnapshotSource {
+  BUILDING
+  CACHE_HIT
+  CACHE_HIT_STALE
+  LIVE_NON_CANONICAL
+}
+
 type ModelAgreementResult {
   buildProgress: ModelAgreementBuildProgress
   excludedNonBinaryCells: Int!
   models: [ModelInfo!]!
   pairwiseAgreementMatrix: [PairwiseAgreementRow!]!
   pending: Boolean!
+  snapshotComputedAt: DateTime
+  snapshotIsStale: Boolean
+  snapshotSource: ModelAgreementSnapshotSource
   tiedCells: Int!
   trialConsistency: [ModelTrialConsistency!]!
   unavailableModels: [UnavailableModelInfo!]!

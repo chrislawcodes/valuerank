@@ -8,6 +8,9 @@
  * For test helpers, see tests/test-utils.ts
  */
 
+import { createHash } from 'node:crypto';
+import { vi } from 'vitest';
+
 // CRITICAL: Force test database - NEVER use production database in tests
 const LOCAL_TEST_DATABASE_URL = 'postgresql://valuerank:valuerank@localhost:5433/valuerank_test';
 
@@ -29,3 +32,18 @@ process.env.DATABASE_URL = resolvedUrl;
 
 // Set JWT_SECRET before any other imports
 process.env.JWT_SECRET = 'test-secret-that-is-at-least-32-characters-long';
+
+vi.mock('bcrypt', () => {
+  const fakeHash = (password: string): string => {
+    const digest = createHash('sha256').update(password).digest('base64').replace(/[^A-Za-z0-9./]/g, '');
+    const body = `${digest}AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA`.slice(0, 53);
+    return `$2b$12$${body}`;
+  };
+
+  return {
+    default: {
+      hash: async (password: string, _cost: number) => fakeHash(password),
+      compare: async (password: string, hash: string) => hash === fakeHash(password),
+    },
+  };
+});

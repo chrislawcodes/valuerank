@@ -19,8 +19,10 @@ import type {
   RefreshDomainAnalysisSnapshotJobData,
   RefreshPressureSensitivitySnapshotJobData,
   RefreshWinRateStabilitySnapshotJobData,
+  RefreshModelAgreementSnapshotJobData,
   StartDomainLaunchJobData,
 } from '../types.js';
+import { REFRESH_MODEL_AGREEMENT_SNAPSHOT_JOB } from '../types.js';
 import { createProbeScenarioHandler } from './probe-scenario/index.js';
 import { createSummarizeTranscriptHandler } from './summarize-transcript.js';
 import { createAnalyzeBasicHandler } from './analyze-basic.js';
@@ -34,6 +36,7 @@ import { createAggregateAnalysisHandler } from './aggregate-analysis.js';
 import { createRefreshDomainAnalysisSnapshotHandler } from './refresh-domain-analysis-snapshot.js';
 import { createRefreshPressureSensitivitySnapshotHandler } from './refresh-pressure-sensitivity-snapshot.js';
 import { createRefreshWinRateStabilitySnapshotHandler } from './refresh-win-rate-stability-snapshot.js';
+import { createRefreshModelAgreementSnapshotHandler } from './refresh-model-agreement-snapshot.js';
 import { createStartDomainLaunchHandler } from './start-domain-launch.js';
 
 // Re-export job data types for handlers
@@ -51,6 +54,7 @@ export type {
   RefreshDomainAnalysisSnapshotJobData,
   RefreshPressureSensitivitySnapshotJobData,
   RefreshWinRateStabilitySnapshotJobData,
+  RefreshModelAgreementSnapshotJobData,
   StartDomainLaunchJobData,
 };
 
@@ -192,6 +196,16 @@ export const handlerRegistrations: HandlerRegistration[] = [
         'refresh_win_rate_stability_snapshot',
         { batchSize },
         createRefreshWinRateStabilitySnapshotHandler()
+      );
+    },
+  },
+  {
+    name: REFRESH_MODEL_AGREEMENT_SNAPSHOT_JOB,
+    register: async (boss, batchSize) => {
+      await boss.work<RefreshModelAgreementSnapshotJobData>(
+        REFRESH_MODEL_AGREEMENT_SNAPSHOT_JOB,
+        { batchSize },
+        createRefreshModelAgreementSnapshotHandler()
       );
     },
   },

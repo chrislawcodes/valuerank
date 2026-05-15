@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { HelpCircle, X } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { ErrorMessage } from '../ui/ErrorMessage';
+import { Badge } from '../ui/Badge';
 import { useModelAgreementOnTradeoffsQuery } from '../../generated/graphql';
 import { PairwiseAgreementMatrixReport } from './PairwiseAgreementMatrixReport';
 import { ModelTrialConsistencyReport } from './ModelTrialConsistencyReport';
@@ -94,6 +95,23 @@ function buildUnavailableModelsNotice(
   return `Unavailable models: ${unavailableModels.map((model) => `${model.label} (${model.reason})`).join(', ')}.`;
 }
 
+function formatSnapshotTimestamp(snapshotComputedAt: string): string {
+  const date = new Date(snapshotComputedAt);
+  const dateLabel = date.toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+    timeZone: 'UTC',
+  });
+  const timeLabel = date.toLocaleTimeString('en-US', {
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true,
+    timeZone: 'UTC',
+  });
+  return `${dateLabel} ${timeLabel} UTC`;
+}
+
 function formatProgressLabel(progress: {
   completedRuns: number;
   totalRuns: number;
@@ -171,6 +189,12 @@ export function ModelAgreementSection({ modelIds, scope, domainId, domainIds, si
 
   const agreement = data?.modelAgreementOnTradeoffs ?? null;
   const rows = agreement?.pairwiseAgreementMatrix ?? EMPTY_PAIRWISE_ROWS;
+  const snapshotComputedAt = agreement?.snapshotComputedAt ?? null;
+  const snapshotSource = agreement?.snapshotSource ?? null;
+  const showFreshnessChip =
+    snapshotComputedAt != null
+    && (snapshotSource === 'CACHE_HIT' || snapshotSource === 'CACHE_HIT_STALE');
+  const freshnessLabel = showFreshnessChip ? formatSnapshotTimestamp(snapshotComputedAt) : null;
   const [selectedPair, setSelectedPair] = useState<SelectedPair | null>(null);
   const [showHelp, setShowHelp] = useState(false);
   const selectedPairKey = formatSelectedPair(selectedPair);
@@ -269,6 +293,17 @@ export function ModelAgreementSection({ modelIds, scope, domainId, domainIds, si
       <div className="space-y-2">
         <div className="flex flex-wrap items-center gap-1.5">
           <h2 className="text-lg font-semibold text-gray-900">Model Agreement on Value Tradeoffs</h2>
+          {showFreshnessChip && freshnessLabel != null ? (
+            <Badge
+              variant={snapshotSource === 'CACHE_HIT_STALE' ? 'warning' : 'neutral'}
+              size="sm"
+              title={snapshotComputedAt}
+              className="ml-1"
+            >
+              Cached as of {freshnessLabel}
+              {snapshotSource === 'CACHE_HIT_STALE' ? ' (refreshing)' : ''}
+            </Badge>
+          ) : null}
           <Button
             variant="ghost"
             size="icon"

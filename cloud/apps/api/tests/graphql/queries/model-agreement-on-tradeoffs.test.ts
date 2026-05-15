@@ -1,9 +1,11 @@
 import express from 'express';
 import request from 'supertest';
 import { createLogger } from '@valuerank/shared';
+import type { PrismaClient } from '@valuerank/db';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { yoga } from '../../../src/graphql/index.js';
 import type { DatabaseModel } from '../../../src/config/models.js';
+import { computeModelAgreement } from '../../../src/services/model-agreement/compute.js';
 import {
   resolveDomainAnalysisScopeDefinitions,
 } from '../../../src/services/analysis/domain-analysis-scope-loader.js';
@@ -19,8 +21,11 @@ const mocks = vi.hoisted(() => ({
   getModelsFromDatabase: vi.fn(),
   resolveDomainAnalysisScopeDefinitions: vi.fn(),
   resolveSignatureRuns: vi.fn(),
+  getModelAgreementSnapshot: vi.fn(),
   readModelAgreementSnapshotStateFromSnapshot: vi.fn(),
   queueDomainAnalysisRefresh: vi.fn(),
+  getBoss: vi.fn(),
+  queueSend: vi.fn(),
 }));
 
 vi.mock('../../../src/config/models.js', () => ({
@@ -35,12 +40,20 @@ vi.mock('../../../src/graphql/queries/domain/shared.js', () => ({
   resolveSignatureRuns: mocks.resolveSignatureRuns,
 }));
 
+vi.mock('../../../src/services/analysis/model-agreement-snapshot/snapshot-cache.js', () => ({
+  getModelAgreementSnapshot: mocks.getModelAgreementSnapshot,
+}));
+
 vi.mock('../../../src/services/analysis/domain-analysis-cache.js', () => ({
   queueDomainAnalysisRefresh: mocks.queueDomainAnalysisRefresh,
 }));
 
 vi.mock('../../../src/services/analysis/domain-analysis-snapshot-readers.js', () => ({
   readModelAgreementSnapshotStateFromSnapshot: mocks.readModelAgreementSnapshotStateFromSnapshot,
+}));
+
+vi.mock('../../../src/queue/boss.js', () => ({
+  getBoss: mocks.getBoss,
 }));
 
 const log = createLogger('test:model-agreement');
@@ -66,7 +79,7 @@ function model(modelId: string, displayName: string): DatabaseModel {
     costInputPerMillion: 1,
     costOutputPerMillion: 1,
     status: 'ACTIVE',
-    isDefault: false,
+    isDefault: modelId === 'model-a' || modelId === 'model-b',
     isAvailable: true,
   };
 }
@@ -155,6 +168,35 @@ function snapshot(entries: Record<string, CellOutcome>): Record<string, CellOutc
   return entries;
 }
 
+const CACHE_TIMESTAMP = new Date('2026-05-01T12:00:00.000Z');
+
+async function buildCacheHitAgreement(args: {
+  modelIds: ReadonlyArray<string | number>;
+  domainId?: string | number | null;
+  domainIds?: ReadonlyArray<string | number> | null;
+  scope: string;
+  signature: string;
+}) {
+  const result = await computeModelAgreement(
+    {} as PrismaClient,
+    args,
+    {
+      getModelsFromDatabase: mocks.getModelsFromDatabase,
+      resolveDomainAnalysisScopeDefinitions: mocks.resolveDomainAnalysisScopeDefinitions,
+      resolveSignatureRuns: mocks.resolveSignatureRuns,
+      readModelAgreementSnapshotStateFromSnapshot: mocks.readModelAgreementSnapshotStateFromSnapshot,
+      queueDomainAnalysisRefresh: async () => false,
+      log,
+    },
+  );
+
+  return {
+    payload: result,
+    source: 'CACHE_HIT' as const,
+    snapshotComputedAt: CACHE_TIMESTAMP,
+  };
+}
+
 async function graphqlRequest(query: string, variables: Record<string, unknown>) {
   return request(app)
     .post('/graphql')
@@ -173,6 +215,9 @@ const agreementQuery = `
         currentRunId
         updatedAt
       }
+      snapshotComputedAt
+      snapshotIsStale
+      snapshotSource
       models { modelId label }
       unavailableModels { modelId label reason }
       excludedNonBinaryCells
@@ -231,6 +276,10 @@ const drilldownQuery = `
 describe('model-agreement-on-tradeoffs GraphQL queries', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.queueSend.mockResolvedValue(undefined);
+    mocks.getBoss.mockReturnValue({
+      send: mocks.queueSend,
+    });
     mocks.getModelsFromDatabase.mockResolvedValue([
       model('model-a', 'Model A'),
       model('model-b', 'Model B'),
@@ -239,6 +288,9 @@ describe('model-agreement-on-tradeoffs GraphQL queries', () => {
     mocks.resolveDomainAnalysisScopeDefinitions.mockResolvedValue(scopeData());
     mocks.resolveSignatureRuns.mockResolvedValue(signatureRuns());
     mocks.queueDomainAnalysisRefresh.mockResolvedValue(true);
+    mocks.getModelAgreementSnapshot.mockImplementation((_prisma, _queue, input) =>
+      buildCacheHitAgreement(input as Parameters<typeof buildCacheHitAgreement>[0]),
+    );
   });
 
   it('returns perfect disagreement metrics and drilldown divergence', async () => {
@@ -261,6 +313,9 @@ describe('model-agreement-on-tradeoffs GraphQL queries', () => {
     const agreement = agreementResponse.body.data.modelAgreementOnTradeoffs as {
       pending: boolean;
       buildProgress: null;
+      snapshotComputedAt: string | null;
+      snapshotIsStale: boolean | null;
+      snapshotSource: string | null;
       pairwiseAgreementMatrix: Array<{
         totalCells: number;
         percentAgreement: number | null;
@@ -277,6 +332,9 @@ describe('model-agreement-on-tradeoffs GraphQL queries', () => {
     };
 
     expect(agreement.pending).toBe(false);
+    expect(agreement.snapshotSource).toBe('CACHE_HIT');
+    expect(agreement.snapshotIsStale).toBe(false);
+    expect(agreement.snapshotComputedAt).toBe('2026-05-01T12:00:00.000Z');
     expect(agreement.pairwiseAgreementMatrix).toHaveLength(1);
     // With a single cell where A always picks canonicalA and B always picks canonicalB,
     // marginals are 1.0 vs 0.0, so P_chance = 0 and kappa = (0 - 0) / (1 - 0) = 0.
@@ -340,6 +398,24 @@ describe('model-agreement-on-tradeoffs GraphQL queries', () => {
 
   it('returns pending while a missing snapshot queues a refresh', async () => {
     mocks.readModelAgreementSnapshotStateFromSnapshot.mockResolvedValue(null);
+    mocks.getModelAgreementSnapshot.mockImplementation(async (_prisma, queue, input) => {
+      await queue.send(
+        'refresh_model_agreement_snapshot',
+        {
+          scope: input.scope,
+          signature: input.signature,
+          domainId: input.domainId,
+          domainIds: [...input.domainIds],
+          modelIds: [...input.modelIds],
+          reason: 'cache-miss',
+        },
+      );
+      return {
+        payload: null,
+        source: 'BUILDING' as const,
+        snapshotComputedAt: null,
+      };
+    });
 
     const response = await graphqlRequest(agreementQuery, {
       modelIds: ['model-a', 'model-b'],
@@ -348,9 +424,12 @@ describe('model-agreement-on-tradeoffs GraphQL queries', () => {
     });
 
     expect(response.body.errors).toBeUndefined();
-    expect(response.body.data.modelAgreementOnTradeoffs).toEqual({
+    expect(response.body.data.modelAgreementOnTradeoffs).toMatchObject({
       pending: true,
       buildProgress: null,
+      snapshotComputedAt: null,
+      snapshotIsStale: false,
+      snapshotSource: 'BUILDING',
       models: [],
       unavailableModels: [],
       excludedNonBinaryCells: 0,
@@ -358,31 +437,36 @@ describe('model-agreement-on-tradeoffs GraphQL queries', () => {
       pairwiseAgreementMatrix: [],
       trialConsistency: [],
     });
-    expect(mocks.queueDomainAnalysisRefresh).toHaveBeenCalledTimes(1);
+    expect(mocks.getBoss).toHaveBeenCalledTimes(1);
+    expect(mocks.queueSend).toHaveBeenCalledTimes(1);
   });
 
-  it('returns a non-pending empty result when the refresh queue is unavailable', async () => {
-    mocks.readModelAgreementSnapshotStateFromSnapshot.mockResolvedValue(null);
-    mocks.queueDomainAnalysisRefresh.mockResolvedValue(false);
+  it('returns a live result for a non-canonical selection without queueing a refresh', async () => {
+    mocks.readModelAgreementSnapshotStateFromSnapshot.mockResolvedValue({
+      cellLevelOutcomes: snapshot({
+        'def-1::model-a::Achievement::Tradition::1::2': { aChoices: 6, bChoices: 0, neutrals: 0 },
+        'def-1::model-c::Achievement::Tradition::1::2': { aChoices: 0, bChoices: 6, neutrals: 0 },
+      }),
+      buildProgress: null,
+      inputHash: 'hash-live-noncanonical',
+    });
 
     const response = await graphqlRequest(agreementQuery, {
-      modelIds: ['model-a', 'model-b'],
+      modelIds: ['model-a', 'model-c'],
       scope: 'ALL_DOMAINS',
       signature: 'sig-1',
     });
 
     expect(response.body.errors).toBeUndefined();
-    expect(response.body.data.modelAgreementOnTradeoffs).toEqual({
+    expect(response.body.data.modelAgreementOnTradeoffs).toMatchObject({
       pending: false,
       buildProgress: null,
-      models: [],
-      unavailableModels: [],
-      excludedNonBinaryCells: 0,
-      tiedCells: 0,
-      pairwiseAgreementMatrix: [],
-      trialConsistency: [],
+      snapshotComputedAt: null,
+      snapshotIsStale: false,
+      snapshotSource: 'LIVE_NON_CANONICAL',
     });
-    expect(mocks.queueDomainAnalysisRefresh).toHaveBeenCalledTimes(1);
+    expect(mocks.getModelAgreementSnapshot).not.toHaveBeenCalled();
+    expect(mocks.queueDomainAnalysisRefresh).not.toHaveBeenCalled();
   });
 
   it('lists a model with no cell-level outcomes as unavailable and keeps it out of the matrix', async () => {
@@ -440,13 +524,13 @@ describe('model-agreement-on-tradeoffs GraphQL queries', () => {
     });
 
     const response = await graphqlRequest(agreementQuery, {
-      modelIds: ['model-a', 'model-b'],
+      modelIds: ['model-a', 'model-c'],
       scope: 'ALL_DOMAINS',
       signature: 'sig-1',
     });
 
     expect(response.body.errors).toBeUndefined();
-    expect(response.body.data.modelAgreementOnTradeoffs).toEqual({
+    expect(response.body.data.modelAgreementOnTradeoffs).toMatchObject({
       pending: true,
       buildProgress: {
         completedRuns: 4,
@@ -454,13 +538,82 @@ describe('model-agreement-on-tradeoffs GraphQL queries', () => {
         currentRunId: 'run-4',
         updatedAt: '2026-05-08T15:00:00.000Z',
       },
-      models: [],
-      unavailableModels: [],
-      excludedNonBinaryCells: 0,
-      tiedCells: 0,
-      pairwiseAgreementMatrix: [],
-      trialConsistency: [],
+      snapshotComputedAt: null,
+      snapshotIsStale: false,
+      snapshotSource: 'LIVE_NON_CANONICAL',
     });
+    expect(mocks.getModelAgreementSnapshot).not.toHaveBeenCalled();
+  });
+
+  it('returns a stale cache hit, marks it refreshing, and queues a refresh', async () => {
+    mocks.readModelAgreementSnapshotStateFromSnapshot.mockResolvedValue({
+      cellLevelOutcomes: snapshot({
+        'def-1::model-a::Achievement::Tradition::1::2': { aChoices: 6, bChoices: 0, neutrals: 0 },
+        'def-1::model-b::Achievement::Tradition::1::2': { aChoices: 0, bChoices: 6, neutrals: 0 },
+      }),
+      buildProgress: null,
+      inputHash: 'hash-stale-cache',
+    });
+    mocks.getModelAgreementSnapshot.mockImplementation(async (_prisma, queue, input) => {
+      await queue.send(
+        'refresh_model_agreement_snapshot',
+        {
+          scope: input.scope,
+          signature: input.signature,
+          domainId: input.domainId,
+          domainIds: [...input.domainIds],
+          modelIds: [...input.modelIds],
+          reason: 'page-load-stale',
+        },
+      );
+      const cacheHit = await buildCacheHitAgreement(input);
+      return {
+        ...cacheHit,
+        source: 'CACHE_HIT_STALE' as const,
+      };
+    });
+
+    const response = await graphqlRequest(agreementQuery, {
+      modelIds: ['model-a', 'model-b'],
+      scope: 'ALL_DOMAINS',
+      signature: 'sig-1',
+    });
+
+    expect(response.body.errors).toBeUndefined();
+    expect(response.body.data.modelAgreementOnTradeoffs).toMatchObject({
+      snapshotSource: 'CACHE_HIT_STALE',
+      snapshotIsStale: true,
+      snapshotComputedAt: '2026-05-01T12:00:00.000Z',
+    });
+    expect(mocks.queueSend).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not reuse the canonical cache for a larger model selection', async () => {
+    mocks.readModelAgreementSnapshotStateFromSnapshot.mockResolvedValue({
+      cellLevelOutcomes: snapshot({
+        'def-1::model-a::Achievement::Tradition::1::2': { aChoices: 6, bChoices: 0, neutrals: 0 },
+        'def-1::model-b::Achievement::Tradition::1::2': { aChoices: 0, bChoices: 6, neutrals: 0 },
+        'def-1::model-c::Achievement::Tradition::1::2': { aChoices: 6, bChoices: 0, neutrals: 0 },
+      }),
+      buildProgress: null,
+      inputHash: 'hash-collision',
+    });
+
+    const canonicalResponse = await graphqlRequest(agreementQuery, {
+      modelIds: ['model-a', 'model-b'],
+      scope: 'ALL_DOMAINS',
+      signature: 'sig-1',
+    });
+
+    const expandedResponse = await graphqlRequest(agreementQuery, {
+      modelIds: ['model-a', 'model-b', 'model-c'],
+      scope: 'ALL_DOMAINS',
+      signature: 'sig-1',
+    });
+
+    expect(canonicalResponse.body.data.modelAgreementOnTradeoffs.snapshotSource).toBe('CACHE_HIT');
+    expect(expandedResponse.body.data.modelAgreementOnTradeoffs.snapshotSource).toBe('LIVE_NON_CANONICAL');
+    expect(mocks.getModelAgreementSnapshot).toHaveBeenCalledTimes(1);
   });
 
   it('returns a zero-overlap row with null metrics when two models never share a cell', async () => {

@@ -1,0 +1,342 @@
+{
+  "review_policy": {
+    "sensitive": false,
+    "large_structural": false,
+    "performance_sensitive": false,
+    "extra_gemini_lenses": []
+  },
+  "blocked": {
+    "active": false,
+    "reason": "",
+    "updated_at": 0
+  },
+  "discovery": {
+    "version": 2,
+    "required": true,
+    "complete": true,
+    "question_count": 0,
+    "asked_count": 0,
+    "questions": [],
+    "assumptions": [
+      "Architecture (extend the existing domain-analysis snapshot to pre-compute the agreement matrix vs. introduce a dedicated agreement-snapshot system in the Win Rate stability style) is a plan-stage decision. The spec captures the user-visible goal regardless of approach.",
+      "Cache key includes scope + signature + domain(s) + the model-set so different selections do not collide.",
+      "The existing 'Preparing model agreement report' UI stays as the cold-build path. Hot path (cached) returns immediately with no Preparing state.",
+      "A 'Cached as of \u2026' freshness chip on /models follows the existing cluster-cache chip pattern in the Domain Analysis cache.",
+      "Cache is invalidated/refreshed when new completed runs change the underlying data for that scope; the resolver returns the cached snapshot and queues a refresh on miss or stale, mirroring the Win Rate stability pattern.",
+      "V1 (/models) and V2 (/models/v2) both benefit equally; no split logic \u2014 the cache lives below the V1/V2 split."
+    ],
+    "summary": "Make the Model Agreement on Value Tradeoffs report load near-instantly on /models and /models/v2 by giving its data the same kind of server-side snapshot caching the Win Rate Stability report just got. Today the modelAgreementOnTradeoffs resolver already has snapshot-read and refresh-queue plumbing (piggy-backing on the domain-analysis snapshot), but heavy scopes still stay on 'Preparing model agreement report' for minutes. Four things on the page depend on this single computation \u2014 the agreement section, the similarity table, the kappa-clustering dendrogram, and the V2 internal-agreement overlay \u2014 so caching it once makes all four instant.",
+    "updated_at": 1778826855,
+    "answers": {},
+    "non_goals": [
+      "No changes to the kappa math or pairwise-comparison logic itself.",
+      "No UI redesign on /models or /models/v2 beyond the freshness chip.",
+      "No backfill scripts beyond what the snapshot builder fills in over time as it runs.",
+      "No changes to the V1/V2 page structure or routing.",
+      "No changes to ModelAgreementSection's existing 'Preparing\u2026' UI \u2014 that stays as the cold-build state."
+    ],
+    "acceptance_criteria": [
+      "On a selection whose snapshot already exists, the Model Agreement on Value Tradeoffs table renders in well under one second after the GraphQL response (not minutes).",
+      "On a fresh selection with no cached snapshot, the resolver returns pending and queues a refresh; the existing 'Preparing model agreement report' UI shows; subsequent loads of the same selection are near-instant.",
+      "The /models page shows a 'Cached as of \u2026' freshness indicator (chip/timestamp) on the agreement-driven reports, matching the existing cluster-cache chip pattern.",
+      "Different selections (different scope / signature / domain(s) / model-set) get independent cache entries with no collisions \u2014 switching domains or signatures does not serve the wrong report.",
+      "When new completed runs change the underlying data, the snapshot is invalidated/refreshed so users do not see stale numbers indefinitely.",
+      "All four agreement-derived surfaces on /models become instant when the snapshot exists: the agreement section, the similarity table, the kappa-clustering dendrogram in kappa-agreement mode, and the V2 internal-agreement overlay.",
+      "API tests cover cache hit, cache miss (queues refresh, returns pending), and stale-then-refresh paths.",
+      "Web lint/test/build and API lint/test/build all pass; no @ts-ignore, no any.",
+      "No regression to V1's rendered output on /models \u2014 existing tests still pass unchanged."
+    ],
+    "unresolved": []
+  },
+  "delivery": {},
+  "dirty_overrides": {},
+  "checkpoint_fallback": {},
+  "parallel_analysis": {
+    "reviewed": true,
+    "found": false,
+    "note": "No parallel opportunities. Slice 2 depends on slice 1's computeModelAgreement, canonicalKey, and computeInputFingerprint. Slice 3 depends on slice 2's snapshot cache. Slice 4 depends on slice 3's GraphQL freshness fields. Strict pipeline.",
+    "updated_at": 1778827892
+  },
+  "init_head_sha": "f97f875bbb4e45adb9422381c4ae125440dde2be",
+  "token_usage": [
+    {
+      "stage": "spec",
+      "round": 1,
+      "activity_type": "adversarial_review",
+      "model": "gpt-5.4-mini",
+      "lens": "feasibility-adversarial",
+      "prompt_chars": 102013,
+      "prompt_cap": 200000,
+      "input_tokens": 44555,
+      "output_tokens": 0,
+      "cost_usd_estimate": 0.044555,
+      "timestamp": "2026-05-15T06:36:30.444127Z",
+      "started_at": "2026-05-15T06:35:25.645533Z",
+      "ended_at": "2026-05-15T06:36:30.444127Z",
+      "duration_seconds": 64.798368,
+      "agent_id": null,
+      "artifact_sha_at_time": "ccd732e3bca9e2cca6e3178b3c529ffce155dfca3b97a4139320207d5802d35a"
+    },
+    {
+      "stage": "spec",
+      "round": 1,
+      "activity_type": "adversarial_review",
+      "model": "gemini-2.5-pro",
+      "lens": "requirements-adversarial",
+      "prompt_chars": 101898,
+      "prompt_cap": 200000,
+      "input_tokens": 51404,
+      "output_tokens": 667,
+      "cost_usd_estimate": 0.06759,
+      "timestamp": "2026-05-15T06:37:50.788077Z",
+      "started_at": "2026-05-15T06:36:30.612176Z",
+      "ended_at": "2026-05-15T06:37:50.788077Z",
+      "duration_seconds": 80.17561,
+      "agent_id": null,
+      "artifact_sha_at_time": "ccd732e3bca9e2cca6e3178b3c529ffce155dfca3b97a4139320207d5802d35a"
+    },
+    {
+      "stage": "plan",
+      "round": 1,
+      "activity_type": "adversarial_review",
+      "model": "gpt-5.4-mini",
+      "lens": "implementation-adversarial",
+      "prompt_chars": 18622,
+      "prompt_cap": 200000,
+      "input_tokens": 21224,
+      "output_tokens": 0,
+      "cost_usd_estimate": 0.021224,
+      "timestamp": "2026-05-15T06:45:05.225206Z",
+      "started_at": "2026-05-15T06:44:27.988458Z",
+      "ended_at": "2026-05-15T06:45:05.225206Z",
+      "duration_seconds": 37.236605,
+      "agent_id": null,
+      "artifact_sha_at_time": "9469ccd3a1bf4a627b474af9a373f144b236cd01499b72b5b816884962183a61"
+    },
+    {
+      "stage": "plan",
+      "round": 1,
+      "activity_type": "adversarial_review",
+      "model": "gemini-2.5-pro",
+      "lens": "testability-adversarial",
+      "prompt_chars": 18503,
+      "prompt_cap": 200000,
+      "input_tokens": 16704,
+      "output_tokens": 1679,
+      "cost_usd_estimate": 0.029275,
+      "timestamp": "2026-05-15T06:45:54.402989Z",
+      "started_at": "2026-05-15T06:45:05.405651Z",
+      "ended_at": "2026-05-15T06:45:54.402989Z",
+      "duration_seconds": 48.997165,
+      "agent_id": null,
+      "artifact_sha_at_time": "9469ccd3a1bf4a627b474af9a373f144b236cd01499b72b5b816884962183a61"
+    },
+    {
+      "stage": "tasks",
+      "round": 1,
+      "activity_type": "implementation",
+      "model": "gpt-5.4-mini",
+      "lens": null,
+      "prompt_chars": 52128,
+      "prompt_cap": null,
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-05-15T07:51:44.263755Z",
+      "started_at": "2026-05-15T06:51:44.246924Z",
+      "ended_at": "2026-05-15T07:51:44.263755Z",
+      "duration_seconds": 3600.014615,
+      "agent_id": null,
+      "artifact_sha_at_time": "737b377efd1fc7f43018a23f52985751e01aca4aa493cfd4532bfde3d3f6ffe3",
+      "parse_error": "no Codex token block found in stderr"
+    }
+  ],
+  "command_telemetry": [
+    {
+      "command": "checkpoint",
+      "stage": "spec",
+      "ts": "2026-05-15T06:37:51Z",
+      "wall_seconds": 145.531,
+      "input_bytes_read": 66813,
+      "output_bytes_written": 29160,
+      "files_read": 13,
+      "files_written": 6,
+      "subprocess_invocations": 10,
+      "ttl_crossed": false
+    },
+    {
+      "command": "reconcile",
+      "stage": null,
+      "ts": "2026-05-15T06:40:17Z",
+      "wall_seconds": 0.26,
+      "input_bytes_read": 33342,
+      "output_bytes_written": 0,
+      "files_read": 6,
+      "files_written": 0,
+      "subprocess_invocations": 20,
+      "ttl_crossed": false
+    },
+    {
+      "command": "reconcile",
+      "stage": null,
+      "ts": "2026-05-15T06:40:17Z",
+      "wall_seconds": 0.263,
+      "input_bytes_read": 35130,
+      "output_bytes_written": 0,
+      "files_read": 6,
+      "files_written": 0,
+      "subprocess_invocations": 20,
+      "ttl_crossed": false
+    },
+    {
+      "command": "checkpoint",
+      "stage": "plan",
+      "ts": "2026-05-15T06:45:54Z",
+      "wall_seconds": 86.803,
+      "input_bytes_read": 150887,
+      "output_bytes_written": 41240,
+      "files_read": 16,
+      "files_written": 6,
+      "subprocess_invocations": 16,
+      "ttl_crossed": false
+    },
+    {
+      "command": "reconcile",
+      "stage": null,
+      "ts": "2026-05-15T06:49:27Z",
+      "wall_seconds": 0.346,
+      "input_bytes_read": 77650,
+      "output_bytes_written": 0,
+      "files_read": 8,
+      "files_written": 0,
+      "subprocess_invocations": 26,
+      "ttl_crossed": false
+    },
+    {
+      "command": "reconcile",
+      "stage": null,
+      "ts": "2026-05-15T06:49:28Z",
+      "wall_seconds": 0.337,
+      "input_bytes_read": 80016,
+      "output_bytes_written": 0,
+      "files_read": 8,
+      "files_written": 0,
+      "subprocess_invocations": 26,
+      "ttl_crossed": false
+    },
+    {
+      "command": "checkpoint",
+      "stage": "tasks",
+      "ts": "2026-05-15T06:51:32Z",
+      "wall_seconds": 0.347,
+      "input_bytes_read": 229864,
+      "output_bytes_written": 52436,
+      "files_read": 19,
+      "files_written": 6,
+      "subprocess_invocations": 20,
+      "ttl_crossed": false
+    }
+  ],
+  "stages": {
+    "spec": {
+      "adversarial_rounds": 1,
+      "annotations": [],
+      "adversarial_sha_history": [
+        "ccd732e3bca9e2cca6e3178b3c529ffce155dfca3b97a4139320207d5802d35a"
+      ],
+      "initial_sha": "ccd732e3bca9e2cca6e3178b3c529ffce155dfca3b97a4139320207d5802d35a",
+      "completed_artifact_sha": "ccd732e3bca9e2cca6e3178b3c529ffce155dfca3b97a4139320207d5802d35a"
+    },
+    "plan": {
+      "adversarial_rounds": 1,
+      "annotations": [],
+      "adversarial_sha_history": [
+        "9469ccd3a1bf4a627b474af9a373f144b236cd01499b72b5b816884962183a61"
+      ],
+      "initial_sha": "9469ccd3a1bf4a627b474af9a373f144b236cd01499b72b5b816884962183a61",
+      "completed_artifact_sha": "9469ccd3a1bf4a627b474af9a373f144b236cd01499b72b5b816884962183a61"
+    },
+    "tasks": {
+      "adversarial_rounds": 1,
+      "annotations": [],
+      "adversarial_sha_history": [
+        "737b377efd1fc7f43018a23f52985751e01aca4aa493cfd4532bfde3d3f6ffe3"
+      ],
+      "initial_sha": "737b377efd1fc7f43018a23f52985751e01aca4aa493cfd4532bfde3d3f6ffe3",
+      "completed_artifact_sha": "737b377efd1fc7f43018a23f52985751e01aca4aa493cfd4532bfde3d3f6ffe3"
+    }
+  },
+  "invariant_warnings": [],
+  "schema_version": 2,
+  "checkpoint_progress": {
+    "index": 0,
+    "markers_sha": "",
+    "last_diff_head_sha": ""
+  },
+  "spec_adversarial_rounds": 1,
+  "last_action_result": {
+    "next": "dispatch_next_slice_to_codex",
+    "reason": "tasks checkpoint completed",
+    "blockers": []
+  },
+  "plan_adversarial_rounds": 1,
+  "tasks_adversarial_rounds": 1,
+  "heartbeats": [
+    {
+      "timestamp_pt": "2026-05-15T00:01:44.247322-07:00",
+      "timestamp_utc": "2026-05-15T07:01:44.247445+00:00",
+      "stage": "implement",
+      "activity": "codex exec running",
+      "elapsed_ms": 600002
+    },
+    {
+      "timestamp_pt": "2026-05-15T00:11:44.259232-07:00",
+      "timestamp_utc": "2026-05-15T07:11:44.259256+00:00",
+      "stage": "implement",
+      "activity": "codex exec running",
+      "elapsed_ms": 1200012
+    },
+    {
+      "timestamp_pt": "2026-05-15T00:21:44.266657-07:00",
+      "timestamp_utc": "2026-05-15T07:21:44.266678+00:00",
+      "stage": "implement",
+      "activity": "codex exec running",
+      "elapsed_ms": 1800019
+    },
+    {
+      "timestamp_pt": "2026-05-15T00:31:44.276695-07:00",
+      "timestamp_utc": "2026-05-15T07:31:44.276718+00:00",
+      "stage": "implement",
+      "activity": "codex exec running",
+      "elapsed_ms": 2400028
+    },
+    {
+      "timestamp_pt": "2026-05-15T00:41:44.286295-07:00",
+      "timestamp_utc": "2026-05-15T07:41:44.286314+00:00",
+      "stage": "implement",
+      "activity": "codex exec running",
+      "elapsed_ms": 3000038
+    },
+    {
+      "timestamp_pt": "2026-05-15T00:51:44.294991-07:00",
+      "timestamp_utc": "2026-05-15T07:51:44.295004+00:00",
+      "stage": "implement",
+      "activity": "codex exec running",
+      "elapsed_ms": 3600046
+    },
+    {
+      "timestamp_pt": "2026-05-15T08:07:18.890738-07:00",
+      "timestamp_utc": "2026-05-15T15:07:18.890834+00:00",
+      "stage": "implement",
+      "activity": "codex exec running",
+      "elapsed_ms": 600005
+    },
+    {
+      "timestamp_pt": "2026-05-15T08:17:18.906522-07:00",
+      "timestamp_utc": "2026-05-15T15:17:18.906589+00:00",
+      "stage": "implement",
+      "activity": "codex exec running",
+      "elapsed_ms": 1200020
+    }
+  ]
+}
