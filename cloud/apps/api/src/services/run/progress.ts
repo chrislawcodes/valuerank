@@ -7,8 +7,13 @@
 import { db } from '@valuerank/db';
 import { createLogger, NotFoundError } from '@valuerank/shared';
 import type { RunProgress } from './derived-progress.js';
+import { getBoss, isBossRunning } from '../../queue/boss.js';
+import { formatRunSignature } from '../../graphql/queries/domain/planning-utils.js';
+import { getAffectedCanonicalKeys } from '../analysis/model-agreement-snapshot/affected-snapshots.js';
+import { queueModelAgreementSnapshotRefresh } from '../analysis/model-agreement-snapshot/snapshot-cache.js';
 
 const log = createLogger('services:run:progress');
+const MODEL_AGREEMENT_REFRESH_REASON = 'completed-run-invalidated-model-agreement';
 
 export type ProgressData = {
   total: number;
@@ -87,6 +92,60 @@ async function triggerCompletionSideEffects(runId: string): Promise<void> {
     await deductActualProviderBalancesForRun(runId);
   } catch (error) {
     log.error({ runId, err: error }, 'Failed to deduct provider balances');
+  }
+
+  try {
+    if (!isBossRunning()) {
+      log.debug({ runId }, 'Skipping model agreement snapshot refresh because queue is unavailable');
+      return;
+    }
+
+    const completedRun = await db.run.findUnique({
+      where: { id: runId },
+      select: {
+        config: true,
+        definition: {
+          select: {
+            domainId: true,
+          },
+        },
+      },
+    });
+
+    const domainId = completedRun?.definition.domainId ?? null;
+    if (completedRun == null || domainId == null) {
+      log.debug({ runId }, 'Skipping model agreement snapshot refresh because the run has no domain');
+      return;
+    }
+
+    const signature = formatRunSignature(completedRun.config).trim();
+    if (signature.length === 0) {
+      log.debug({ runId }, 'Skipping model agreement snapshot refresh because signature could not be derived');
+      return;
+    }
+
+    const affectedKeys = await getAffectedCanonicalKeys(db, {
+      signature,
+      domainId,
+    });
+    if (affectedKeys.length === 0) {
+      return;
+    }
+
+    const boss = getBoss();
+    let queuedCount = 0;
+    for (const key of affectedKeys) {
+      const queued = await queueModelAgreementSnapshotRefresh(db, boss, key, MODEL_AGREEMENT_REFRESH_REASON);
+      if (queued) {
+        queuedCount += 1;
+      }
+    }
+
+    if (queuedCount > 0) {
+      log.info({ runId, queuedCount, domainId, signature }, 'Queued model agreement snapshot refreshes');
+    }
+  } catch (error) {
+    log.error({ runId, err: error }, 'Failed to queue model agreement snapshot refreshes');
   }
 }
 

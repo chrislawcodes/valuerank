@@ -1,7 +1,8 @@
-import type { PrismaClient } from '@valuerank/db';
+import type { Prisma } from '@valuerank/db';
 import { resolveDomainAnalysisScopeDefinitions } from '../domain-analysis-scope-loader.js';
 import { resolveDomainAnalysisSelection } from '../domain-analysis-scope.js';
 import { resolveSignatureRuns } from '../../../graphql/queries/domain/shared.js';
+import { normalizeCanonicalIds } from './canonical-key.js';
 import type { ModelAgreementSnapshotInput } from './snapshot-types.js';
 
 type SourceRunRow = {
@@ -9,12 +10,10 @@ type SourceRunRow = {
   sum: bigint;
 };
 
-function normalizeIds(ids: ReadonlyArray<string>): string[] {
-  return [...new Set(ids)].sort();
-}
-
+// Accepts a PrismaClient or any TransactionClient so the resolver and the
+// snapshot-cache reader (which runs inside a $transaction) can both call this.
 export async function computeInputFingerprint(
-  prisma: PrismaClient,
+  prisma: Prisma.TransactionClient,
   input: ModelAgreementSnapshotInput,
 ): Promise<{
   sourceRunCount: number;
@@ -26,13 +25,11 @@ export async function computeInputFingerprint(
     domainIds: input.domainIds,
   });
 
-  const normalizedModelIds = normalizeIds(input.modelIds);
-  if (normalizedModelIds.length === 0) {
-    return {
-      sourceRunCount: 0,
-      sourceRunUpdatedAtSum: 0n,
-    };
-  }
+  // Normalize the model IDs to ensure logically identical selections (different
+  // input orders / duplicates) compute the same fingerprint. The hashed form
+  // is not used here, but invoking the normalizer keeps the canonical-input
+  // contract consistent across reader and writer.
+  normalizeCanonicalIds(input.modelIds);
 
   const scopeData = await resolveDomainAnalysisScopeDefinitions({
     scope: selection.scope,
@@ -43,7 +40,7 @@ export async function computeInputFingerprint(
   const resolvedSignatureRuns: Awaited<ReturnType<typeof resolveSignatureRuns>> = await resolveSignatureRuns(
     scopeData.latestDefinitionIds,
     input.signature,
-    normalizedModelIds,
+    scopeData.domain.defaultModelIds,
   );
 
   if (resolvedSignatureRuns.filteredSourceRunIds.length === 0) {
@@ -56,7 +53,7 @@ export async function computeInputFingerprint(
   const rows = await prisma.$queryRaw<SourceRunRow[]>`
     SELECT
       COUNT(*)::INT AS count,
-      COALESCE(SUM(EXTRACT(EPOCH FROM "updated_at")::BIGINT), 0)::BIGINT AS sum
+      COALESCE(SUM(EXTRACT(EPOCH FROM "updated_at")), 0)::BIGINT AS sum
     FROM runs
     WHERE id = ANY(${resolvedSignatureRuns.filteredSourceRunIds}::text[])
   `;

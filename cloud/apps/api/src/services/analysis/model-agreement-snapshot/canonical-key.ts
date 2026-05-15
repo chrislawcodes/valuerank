@@ -1,12 +1,12 @@
 import { createHash } from 'node:crypto';
 
-function normalizeIds(ids: ReadonlyArray<string>): string[] {
+export function normalizeCanonicalIds(ids: ReadonlyArray<string>): string[] {
   return [...new Set(ids)]
     .sort();
 }
 
 function hashCanonicalIds(ids: ReadonlyArray<string>): string {
-  const normalized = normalizeIds(ids);
+  const normalized = normalizeCanonicalIds(ids);
   return createHash('sha256')
     .update(normalized.join('\u0000'))
     .digest('hex')
