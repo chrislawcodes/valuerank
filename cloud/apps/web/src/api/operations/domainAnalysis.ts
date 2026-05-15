@@ -62,6 +62,9 @@ export type DomainAnalysisModel = {
   label: string;
   values: DomainAnalysisValueScore[];
   rankingShape?: RankingShape;
+  // Condition-weighted neutral rate (0–1 fraction). Null when no trials, or
+  // when reading a legacy snapshot/query that predates this field.
+  neutralRate?: number | null;
 };
 
 export type DomainAnalysisUnavailableModel = {

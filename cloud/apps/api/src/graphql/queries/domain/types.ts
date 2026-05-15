@@ -62,6 +62,9 @@ export type DomainAnalysisModel = {
   values: DomainAnalysisValueScore[];
   rankingShape: RankingShape;
   pairwiseWinRateModel: PairwiseWinRateModel | null;
+  // Condition-weighted neutral rate (0–1 fraction): per-condition neutral share
+  // averaged per vignette, then across vignettes. null when no trials.
+  neutralRate: number | null;
 };
 
 export type DomainAnalysisCacheStatus = 'FRESH' | 'UPDATING' | 'OUT_OF_DATE';
@@ -292,6 +295,11 @@ builder.objectType(DomainAnalysisModelRef, {
       type: PairwiseWinRateModelRef,
       nullable: true,
       resolve: (parent) => parent.pairwiseWinRateModel,
+    }),
+    neutralRate: t.field({
+      type: 'Float',
+      nullable: true,
+      resolve: (parent) => parent.neutralRate,
     }),
   }),
 });

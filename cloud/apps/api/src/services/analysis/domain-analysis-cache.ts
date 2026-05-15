@@ -162,7 +162,11 @@ function buildDomainAnalysisResultFromSnapshot(params: {
       model: model.model,
       label: activeModelLabelById.get(model.model) ?? model.model,
       values,
-      pairwiseWinRateModel: buildPairwiseWinRateModel(model.pairwiseWins, model.pairwiseNeutrals),
+      // Prefer the v1.14.0+ vignette-averaged matrix; fall back to building one
+      // from the legacy pooled count maps for snapshots predating v1.14.0.
+      pairwiseWinRateModel: model.pairwiseWinRateModel
+        ?? buildPairwiseWinRateModel(model.pairwiseWins ?? {}, model.pairwiseNeutrals),
+      neutralRate: model.neutralRate ?? null,
     };
   });
 

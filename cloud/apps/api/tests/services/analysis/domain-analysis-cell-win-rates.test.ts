@@ -185,7 +185,7 @@ describe('computeCellWeightedDomainRates', () => {
     expect(result.models[0]?.valueWinRates[FIRST_VALUE]).toBeCloseTo(50, 5);
   });
 
-  it('maps pairwise wins by winner and opponent value key', () => {
+  it('builds vignette-averaged pairwise win rates by winner and opponent value key', () => {
     const cellMap = new Map<string, CellCounts>([
       [buildCellKey({ definitionId: 'def1', modelId: 'm1', valueKey: FIRST_VALUE, ownLevel: 1, opponentLevel: 2 }), buildCounts(3, 1, 0)],
       [buildCellKey({ definitionId: 'def1', modelId: 'm1', valueKey: SECOND_VALUE, ownLevel: 2, opponentLevel: 1 }), buildCounts(2, 0, 0)],
@@ -197,8 +197,74 @@ describe('computeCellWeightedDomainRates', () => {
       definitionValuePairById: new Map([['def1', { valueA: FIRST_VALUE, valueB: SECOND_VALUE }]]),
     });
 
-    expect(result.models[0]?.pairwiseWins[FIRST_VALUE]?.[SECOND_VALUE]).toBe(3);
-    expect(result.models[0]?.pairwiseWins[SECOND_VALUE]?.[FIRST_VALUE]).toBe(2);
+    const pairwise = result.models[0]?.pairwiseWinRateModel;
+    expect(pairwise).toBeDefined();
+    const order = pairwise!.valueOrder;
+    const a = order.indexOf(FIRST_VALUE);
+    const s = order.indexOf(SECOND_VALUE);
+    // Achievement: 3 wins / 1 loss in its only cell → 0.75; Security: 2 / 0 → 1.0.
+    expect(pairwise!.winRateMatrix[a]?.[s]).toBeCloseTo(0.75, 5);
+    expect(pairwise!.winRateMatrix[s]?.[a]).toBeCloseTo(1, 5);
+    // Trial counts stay pooled: 3 (A wins) + 2 (S wins) + 0 neutral.
+    expect(pairwise!.trialCountMatrix[a]?.[s]).toBe(5);
+  });
+
+  it('averages pairwise win rates per vignette instead of pooling trial counts', () => {
+    // def1: Achievement 9/1 (one trial-heavy cell). def2: Achievement 0/1.
+    // Pooled would be 9/11 ≈ 0.818; vignette-averaged is avg(0.9, 0.0) = 0.45.
+    const cellMap = new Map<string, CellCounts>([
+      [buildCellKey({ definitionId: 'def1', modelId: 'm1', valueKey: FIRST_VALUE, ownLevel: 1, opponentLevel: 2 }), buildCounts(9, 1, 0)],
+      [buildCellKey({ definitionId: 'def2', modelId: 'm1', valueKey: FIRST_VALUE, ownLevel: 1, opponentLevel: 2 }), buildCounts(0, 1, 0)],
+    ]);
+
+    const result = computeCellWeightedDomainRates({
+      cellMap,
+      filteredSourceRunDefinitionById: new Map([['run-1', 'def1'], ['run-2', 'def2']]),
+      definitionValuePairById: new Map([
+        ['def1', { valueA: FIRST_VALUE, valueB: SECOND_VALUE }],
+        ['def2', { valueA: FIRST_VALUE, valueB: SECOND_VALUE }],
+      ]),
+    });
+
+    const pairwise = result.models[0]?.pairwiseWinRateModel;
+    const a = pairwise!.valueOrder.indexOf(FIRST_VALUE);
+    const s = pairwise!.valueOrder.indexOf(SECOND_VALUE);
+    expect(pairwise!.winRateMatrix[a]?.[s]).toBeCloseTo(0.45, 5);
+  });
+
+  it('computes a condition-weighted neutral rate per model', () => {
+    // def1 has two conditions: neutral shares 0.2 and 0.8 → vignette rate 0.5.
+    // def2 has one condition: neutral share 0.1. Model rate = avg(0.5, 0.1) = 0.3.
+    const cellMap = new Map<string, CellCounts>([
+      [buildCellKey({ definitionId: 'def1', modelId: 'm1', valueKey: FIRST_VALUE, ownLevel: 1, opponentLevel: 2 }), buildCounts(8, 0, 2)],
+      [buildCellKey({ definitionId: 'def1', modelId: 'm1', valueKey: FIRST_VALUE, ownLevel: 2, opponentLevel: 1 }), buildCounts(1, 1, 8)],
+      [buildCellKey({ definitionId: 'def2', modelId: 'm1', valueKey: FIRST_VALUE, ownLevel: 1, opponentLevel: 2 }), buildCounts(9, 0, 1)],
+    ]);
+
+    const result = computeCellWeightedDomainRates({
+      cellMap,
+      filteredSourceRunDefinitionById: new Map([['run-1', 'def1'], ['run-2', 'def2']]),
+      definitionValuePairById: new Map([
+        ['def1', { valueA: FIRST_VALUE, valueB: SECOND_VALUE }],
+        ['def2', { valueA: FIRST_VALUE, valueB: SECOND_VALUE }],
+      ]),
+    });
+
+    expect(result.models[0]?.neutralRate).toBeCloseTo(0.3, 5);
+  });
+
+  it('returns a null neutral rate when every cell is zero-trial', () => {
+    const cellMap = new Map<string, CellCounts>([
+      [buildCellKey({ definitionId: 'def1', modelId: 'm1', valueKey: FIRST_VALUE, ownLevel: 1, opponentLevel: 2 }), buildCounts(0, 0, 0)],
+    ]);
+
+    const result = computeCellWeightedDomainRates({
+      cellMap,
+      filteredSourceRunDefinitionById: new Map([['run-1', 'def1']]),
+      definitionValuePairById: new Map([['def1', { valueA: FIRST_VALUE, valueB: SECOND_VALUE }]]),
+    });
+
+    expect(result.models[0]?.neutralRate).toBeNull();
   });
 });
 

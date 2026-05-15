@@ -36,6 +36,7 @@ import { PairwiseWinRateMatrix } from '../components/domains/PairwiseWinRateMatr
 import { ValuePrioritiesSection } from '../components/domains/ValuePrioritiesSection';
 import { DomainShiftsReportSection } from '../components/models/DomainShiftsReportSection';
 import { WinRateStabilitySection } from '../components/models/WinRateStabilitySection';
+import { NeutralRateSection } from '../components/models/NeutralRateSection';
 import {
   VALUES,
   type ModelEntry,
@@ -662,6 +663,7 @@ export function DomainAnalysis() {
             winRateMode={winRateMode}
             cacheStatus={modelsStabilityData?.modelsWinRateStability.cacheStatus}
           />
+          <NeutralRateSection models={visiblePairwiseModels} />
         </>
       )}
 
