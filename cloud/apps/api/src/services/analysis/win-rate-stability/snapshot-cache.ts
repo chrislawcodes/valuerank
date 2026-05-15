@@ -156,6 +156,14 @@ export async function getWinRateStabilityResult(
     const parsed = parseWinRateStabilitySnapshotOutput(currentSnapshot.output);
     if (parsed != null) {
       if (currentSnapshot.inputHash === state.inputHash) {
+        // The slow path just confirmed the snapshot is still valid — same
+        // check the warming cron does. Stamp lastValidatedAt so subsequent
+        // reads within the TTL can fast-path. Self-heals per-domain
+        // snapshots that the warming cron does not cover.
+        await db.assumptionAnalysisSnapshot.update({
+          where: { id: currentSnapshot.id },
+          data: { lastValidatedAt: new Date() },
+        });
         return withReadMetadata(parsed, 'FRESH', currentSnapshot.createdAt);
       }
       const queued = await queueWinRateStabilityRefresh({ request, reason: 'page-load-stale' });
