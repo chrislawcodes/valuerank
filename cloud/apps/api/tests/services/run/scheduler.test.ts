@@ -5,6 +5,7 @@ const mockDbRunFindMany = vi.hoisted(() => vi.fn());
 const mockDbTranscriptFindFirst = vi.hoisted(() => vi.fn());
 const mockDbRunAnomalyFindFirst = vi.hoisted(() => vi.fn());
 const mockDbQueryRaw = vi.hoisted(() => vi.fn());
+const mockDbDomainFindMany = vi.hoisted(() => vi.fn());
 const mockBossSchedule = vi.hoisted(() => vi.fn());
 const mockBossUnschedule = vi.hoisted(() => vi.fn());
 const mockLogDebug = vi.hoisted(() => vi.fn());
@@ -23,6 +24,9 @@ vi.mock('@valuerank/db', () => ({
     },
     runAnomaly: {
       findFirst: mockDbRunAnomalyFindFirst,
+    },
+    domain: {
+      findMany: mockDbDomainFindMany,
     },
     $queryRaw: mockDbQueryRaw,
   },
@@ -99,6 +103,7 @@ describe('getReconcileWindowDays', () => {
     mockDbRunFindMany.mockResolvedValue([]);
     mockDbTranscriptFindFirst.mockResolvedValue(null);
     mockDbQueryRaw.mockResolvedValue([]);
+    mockDbDomainFindMany.mockResolvedValue([]);
     mockBossSchedule.mockResolvedValue(undefined);
     mockBossUnschedule.mockResolvedValue(undefined);
   });
@@ -184,6 +189,58 @@ describe('getReconcileWindowDays', () => {
       }),
       'Registered win-rate-stability warming schedule'
     );
+  });
+
+  it('registers per-domain and minus-invasion warming schedules anchored at 6 AM PT', async () => {
+    mockDbDomainFindMany.mockResolvedValue([
+      { id: 'dom-jobs', name: 'Job Choice' },
+      { id: 'dom-invasion', name: 'Motivation for Invasion Choice' },
+      { id: 'dom-product', name: 'Product Choice' },
+    ]);
+
+    const { startRecoveryScheduler } = await loadScheduler();
+    await startRecoveryScheduler();
+
+    // Find a per-domain DA schedule and assert its shape — cron at 6/12/18/0 PT,
+    // tz Los_Angeles, scoped to the single domain.
+    const perDomainDaCall = mockBossSchedule.mock.calls.find(
+      ([jobName, _cron, payload]) =>
+        jobName === 'refresh_domain_analysis_snapshot'
+        && (payload as { scope?: string }).scope === 'DOMAIN'
+        && (payload as { domainId?: string }).domainId === 'dom-jobs',
+    );
+    expect(perDomainDaCall).toBeDefined();
+    expect(perDomainDaCall?.[1]).toMatch(/^\d+ 0,6,12,18 \* \* \*$/);
+    expect(perDomainDaCall?.[3]).toMatchObject({
+      key: 'warm:domain:dom-jobs',
+      tz: 'America/Los_Angeles',
+    });
+
+    // The minus-invasion schedule should be DOMAIN_SET with all non-invasion ids.
+    const minusInvasionDaCall = mockBossSchedule.mock.calls.find(
+      ([jobName, _cron, _payload, options]) =>
+        jobName === 'refresh_domain_analysis_snapshot'
+        && (options as { key?: string }).key === 'warm:minus-motivation-for-invasion',
+    );
+    expect(minusInvasionDaCall).toBeDefined();
+    expect((minusInvasionDaCall?.[2] as { scope?: string }).scope).toBe('DOMAIN_SET');
+    expect((minusInvasionDaCall?.[2] as { domainIds?: string[] }).domainIds?.sort()).toEqual([
+      'dom-jobs',
+      'dom-product',
+    ]);
+    expect(minusInvasionDaCall?.[3]).toMatchObject({ tz: 'America/Los_Angeles' });
+
+    // And a stability schedule for the same minus-invasion target should exist.
+    const minusInvasionStabilityCall = mockBossSchedule.mock.calls.find(
+      ([jobName, _cron, _payload, options]) =>
+        jobName === 'refresh_win_rate_stability_snapshot'
+        && (options as { key?: string }).key === 'warm:minus-motivation-for-invasion',
+    );
+    expect(minusInvasionStabilityCall).toBeDefined();
+    expect((minusInvasionStabilityCall?.[2] as { domainIds?: string[] }).domainIds?.sort()).toEqual([
+      'dom-jobs',
+      'dom-product',
+    ]);
   });
 
   it('falls back to the default and warns when the env var is invalid', async () => {
