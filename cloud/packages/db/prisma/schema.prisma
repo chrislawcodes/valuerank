@@ -780,6 +780,11 @@ model AssumptionAnalysisSnapshot {
   output        Json                     @db.JsonB
   status        AssumptionAnalysisStatus @default(CURRENT)
   createdAt     DateTime                 @default(now()) @map("created_at")
+  // Last time a warm/refresh confirmed this snapshot's input hash still matches
+  // the underlying data. Lets cache reads skip the expensive per-request
+  // validation when the snapshot was confirmed fresh recently. Null on rows
+  // written before this column existed — treated as "never validated".
+  lastValidatedAt DateTime?              @map("last_validated_at")
   deletedAt     DateTime?                @map("deleted_at")
 
   @@index([assumptionKey])

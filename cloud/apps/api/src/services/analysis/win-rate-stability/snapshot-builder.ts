@@ -349,6 +349,7 @@ export async function writeWinRateStabilitySnapshot(params: {
       config: { scopeId: params.scopeId, signature: params.configSignature },
       output: params.output as object,
       status: 'CURRENT',
+      lastValidatedAt: new Date(),
     },
   });
 }

@@ -8,6 +8,7 @@ import {
   type DomainAnalysisSelection,
 } from '../domain-analysis-scope.js';
 import {
+  WIN_RATE_STABILITY_SNAPSHOT_CODE_VERSION,
   WIN_RATE_STABILITY_SNAPSHOT_TYPE,
   type WinRateStabilitySnapshotOutput,
 } from './snapshot-types.js';
@@ -18,6 +19,7 @@ import {
   prepareWinRateStabilityState,
   writeWinRateStabilitySnapshot,
 } from './snapshot-builder.js';
+import { canFastPathSnapshot } from '../snapshot-fast-path.js';
 
 const log = createLogger('win-rate-stability:cache');
 
@@ -74,6 +76,29 @@ export async function queueWinRateStabilityRefresh(params: {
 export async function refreshWinRateStabilitySnapshot(request: WinRateStabilityRequest): Promise<void> {
   const selection = resolveSelection(request);
   const state = await prepareWinRateStabilityState({ selection, signature: request.signature });
+  const assumptionKey = buildWinRateStabilityAssumptionKey(selection.domainId);
+
+  // If a CURRENT snapshot already matches the freshly-derived input hash, the
+  // underlying data has not changed — just stamp lastValidatedAt so cache reads
+  // keep fast-pathing, and skip the rebuild.
+  const existing = await db.assumptionAnalysisSnapshot.findFirst({
+    where: {
+      assumptionKey,
+      analysisType: WIN_RATE_STABILITY_SNAPSHOT_TYPE,
+      configSignature: state.configSignature,
+      inputHash: state.inputHash,
+      status: 'CURRENT',
+      deletedAt: null,
+    },
+  });
+  if (existing != null && parseWinRateStabilitySnapshotOutput(existing.output) != null) {
+    await db.assumptionAnalysisSnapshot.update({
+      where: { id: existing.id },
+      data: { lastValidatedAt: new Date() },
+    });
+    return;
+  }
+
   const output = await buildWinRateStabilityOutput(state);
   await writeWinRateStabilitySnapshot({
     scopeId: selection.domainId,
@@ -100,19 +125,32 @@ export async function getWinRateStabilityResult(
   request: WinRateStabilityRequest,
 ): Promise<ModelsStabilityResultShape> {
   const selection = resolveSelection(request);
-  const state = await prepareWinRateStabilityState({ selection, signature: request.signature });
+  const configSignature = normalizeWinRateStabilitySignature(request.signature);
   const assumptionKey = buildWinRateStabilityAssumptionKey(selection.domainId);
 
   const currentSnapshot = await db.assumptionAnalysisSnapshot.findFirst({
     where: {
       assumptionKey,
       analysisType: WIN_RATE_STABILITY_SNAPSHOT_TYPE,
-      configSignature: state.configSignature,
+      configSignature,
       status: 'CURRENT',
       deletedAt: null,
     },
     orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
   });
+
+  // Fast path: a snapshot confirmed valid recently (by an hourly warm) is
+  // trusted without re-deriving the input hash, which costs several DB
+  // round-trips in prepareWinRateStabilityState.
+  if (currentSnapshot != null && canFastPathSnapshot(currentSnapshot, WIN_RATE_STABILITY_SNAPSHOT_CODE_VERSION)) {
+    const parsed = parseWinRateStabilitySnapshotOutput(currentSnapshot.output);
+    if (parsed != null) {
+      return withReadMetadata(parsed, 'FRESH', currentSnapshot.createdAt);
+    }
+  }
+
+  // Slow path: re-derive the input hash and compare against the snapshot.
+  const state = await prepareWinRateStabilityState({ selection, signature: request.signature });
 
   if (currentSnapshot != null) {
     const parsed = parseWinRateStabilitySnapshotOutput(currentSnapshot.output);

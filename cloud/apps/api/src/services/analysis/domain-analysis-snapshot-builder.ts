@@ -469,6 +469,7 @@ export async function writeSnapshot(params: {
       },
       output: params.output,
       status: 'CURRENT',
+      lastValidatedAt: new Date(),
     },
   });
 }
