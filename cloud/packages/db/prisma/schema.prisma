@@ -798,6 +798,27 @@ model AssumptionAnalysisSnapshot {
   @@map("assumption_analysis_snapshots")
 }
 
+model ModelAgreementSnapshot {
+  id                    String   @id @default(cuid())
+  scope                 String
+  signature             String
+  domainIdsHash         String   @db.Char(32) @map("domain_ids_hash")
+  modelIdsHash          String   @db.Char(32) @map("model_ids_hash")
+  domainIds             String[] @map("domain_ids")
+  modelIds              String[] @map("model_ids")
+  agreementResultJson   Json     @db.JsonB @map("agreement_result_json")
+  sourceRunCount        Int      @map("source_run_count")
+  sourceRunUpdatedAtSum BigInt @map("source_run_updated_at_sum")
+  algorithmVersion      Int      @map("algorithm_version")
+  computedAt            DateTime @map("computed_at")
+  createdAt             DateTime @default(now()) @map("created_at")
+  updatedAt             DateTime @updatedAt @map("updated_at")
+
+  @@unique([scope, signature, domainIdsHash, modelIdsHash])
+  @@index([scope, signature])
+  @@map("model_agreement_snapshots")
+}
+
 model Rubric {
   id        String   @id @default(cuid())
   version   Int      @unique
