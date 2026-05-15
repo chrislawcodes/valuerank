@@ -1,0 +1,57 @@
+{
+  "session_id": "5de495ba-a677-445b-957d-7607314c88c3",
+  "response": "Here is a testability-adversarial review of the provided plan artifact.\n\n## Findings\n\n| Severity | Finding |\n| :--- | :--- |\n| **HIGH** | **The input fingerprint for staleness is not robust to deletions or updates that do not change the max `updatedAt`.**<br/>The proposed fingerprint is `sourceRunCount + sourceRunMaxUpdatedAt`. This is insufficient to detect all changes that should invalidate a snapshot. Consider this scenario: 1) A snapshot is built from 10 runs, with the newest `updatedAt` being `T`. The fingerprint is `(10, T)`. 2) The most recent run is deleted. 3) A different, older run is updated, but its new `updatedAt` is still less than `T`. The new state has 9 runs, but the fingerprint query for the new state might still calculate a count of 9 and the same max `updatedAt` of `T` from the remaining runs. A more common case: a run is deleted, and no other run is updated. The count changes to 9, but `max(updatedAt)` is now an earlier time. The fingerprint `(9, T-delta)` would be different. However, if a run *other than the one with the max `updatedAt`* is deleted, the `max(updatedAt)` remains the same and only the count changes. If at the same time a new run is added, the count could stay the same, masking the deletion. This creates a risk of serving stale data indefinitely. <br/><br/>**Remediation:** Use a more robust fingerprint. A better approach would be to hash a concatenated string of `(ID, updatedAt)` for all source runs, or to compute a checksum (`XOR`) of the IDs and timestamps. An even simpler, more robust fingerprint would be `SUM(CAST(updatedAt as BIGINT)) + COUNT(*)`. This would catch almost all changes, including deletions. |\n| **MEDIUM** | **The plan for migrating the live resolver logic into a \"pure-ish\" builder is optimistic and lacks a clear testing strategy.**<br/>Slice 2 assumes that the existing live computation logic can be cleanly extracted and reused in `snapshot-builder.ts`. This is a major assumption. The live logic may have complex, implicit dependencies on the resolver context, database connections, or other services that make it difficult to run in a separate queue-handler context. The plan does not specify how to test this \"extracted\" logic independently or how to mock its dependencies. This creates a risk that Slice 2 will be much larger than estimated and that the resulting builder will be difficult to test in isolation, leading to fragile, integration-style unit tests.<br/><br/>**Remediation:** Add a \"Slice 1.5\" to the plan. This slice would focus *only* on refactoring the existing live resolver logic into a testable, dependency-injected service with a clear interface. This service would then be used by *both* the existing live resolver and the new snapshot builder. The tests for this new service would verify its correctness before any caching is built, decoupling the core logic from the caching mechanism. |\n| **MEDIUM** | **[UNVERIFIED] The UI plan for a single, header-level freshness chip has an unstated architectural dependency.**<br/>Slice 4 proposes rendering a single freshness chip in the shared `ModelGroups.tsx` component. However, the data required for this chip (`snapshotSource`, `snapshotComputedAt`) comes from the `modelAgreementOnTradeoffs` GraphQL query, which is initiated within the child `ModelAgreementSection.tsx` component. The plan does not specify how this state will be lifted up to the parent component. This implies a required refactoring (e.g., using React Context, a shared state management store, or prop-drilling) that is not accounted for in the work estimate or file list. It's not a simple \"render a chip\" task.<br/><br/>**Remediation:** The plan for Slice 4 must be updated to explicitly include the task of lifting state from the child component to the parent. This involves identifying the specific mechanism (e.g., \"Introduce a React Context provider in `ModelGroups.tsx`\") and updating the file list and work estimates accordingly. |\n| **LOW** | **The plan defers a critical performance decision with a weak verification step.**<br/>The plan's mitigation for the \"Builder times out\" risk is to measure the build time once during implementation and potentially increase a timeout value. This is insufficient for a process whose runtime may vary with data scale and server load. Deferring the decision on `KAPPA_BOOTSTRAP_ITERATIONS` to a time-crunched slice implementation makes it likely that the timeout will just be increased, baking in a potentially slow process without fully exploring alternatives. Furthermore, if the iterations *are* reduced, the plan has no mechanism to test for or communicate the resulting impact on data quality to the end-user.<br/><br/>**Remediation:** The plan should include the creation of a performance-benchmark test as part of Slice 2. This test should be runnable on-demand against a configurable data size and should assert that the builder completes within a given threshold. This provides a long-term tool for evaluating performance regressions, rather than a one-time manual check. The decision to reduce bootstrap iterations should trigger a requirement for a UI change to indicate reduced precision. |\n| **LOW** | **The hash length for cache keys is potentially too short, creating a non-zero collision risk.**<br/>The plan proposes truncating a SHA-256 hash to 16 hex characters (64 bits) for the `domainIdsHash` and `modelIdsHash`. While a 64-bit space is large, it is not immune to collisions, especially as the number of unique domain/model combinations grows over time. A collision would result in silently serving incorrect data. The database's unique index would not prevent this; it would simply cause a write to `(scope, signature, hash_A, hash_B)` to be treated as an update to an existing row with the same hashes, even if the underlying IDs were different.<br/><br/>**Remediation:** Increase the hash length to at least 32 hex characters (128 bits). The storage cost is negligible, and it dramatically reduces the probability of a collision to near-zero, effectively eliminating this risk. |\n\n## Residual Risks\n\nEven if all the findings above are addressed, the following risks remain inherent to the plan's architecture:\n\n1.  **Canonical Set Brittleness:** The entire caching strategy relies on the concept of a \"canonical default-model-set\" for a given signature. The plan does not discuss how this set is managed, versioned, or updated. If this external configuration is managed poorly, it could lead to the cache being perpetually stale or containing data for model sets that are no longer the default, while new defaults are uncached. The mechanism for defining \"canonical\" is a critical, unexamined dependency.\n2.  **Build Time Creep:** While a benchmark test helps, the fundamental runtime of the snapshot builder is dependent on data volume. As the number of runs grows, build times will increase. The scheduled fallback, if running on a fixed interval (e.g., hourly), may eventually be unable to keep up if the total build time for all snapshots exceeds the interval, leading to progressively staler data across the system.\n3.  **\"Thundering Herd\" on New Signatures:** When a new signature is introduced, no snapshots will exist. The first several users who view it will all trigger a \"fall back to live\" computation, and/or multiple `BUILDING` requests could be enqueued for the same snapshot before the first one completes. While the plan debounces this for run completions, it does not explicitly address debouncing for on-demand read-time triggers.",
+  "stats": {
+    "models": {
+      "gemini-2.5-pro": {
+        "api": {
+          "totalRequests": 1,
+          "totalErrors": 0,
+          "totalLatencyMs": 45232
+        },
+        "tokens": {
+          "input": 16704,
+          "prompt": 16704,
+          "candidates": 1679,
+          "total": 20205,
+          "cached": 0,
+          "thoughts": 1822,
+          "tool": 0
+        },
+        "roles": {
+          "main": {
+            "totalRequests": 1,
+            "totalErrors": 0,
+            "totalLatencyMs": 45232,
+            "tokens": {
+              "input": 16704,
+              "prompt": 16704,
+              "candidates": 1679,
+              "total": 20205,
+              "cached": 0,
+              "thoughts": 1822,
+              "tool": 0
+            }
+          }
+        }
+      }
+    },
+    "tools": {
+      "totalCalls": 0,
+      "totalSuccess": 0,
+      "totalFail": 0,
+      "totalDurationMs": 0,
+      "totalDecisions": {
+        "accept": 0,
+        "reject": 0,
+        "modify": 0,
+        "auto_accept": 0
+      },
+      "byName": {}
+    },
+    "files": {
+      "totalLinesAdded": 0,
+      "totalLinesRemoved": 0
+    }
+  }
+}

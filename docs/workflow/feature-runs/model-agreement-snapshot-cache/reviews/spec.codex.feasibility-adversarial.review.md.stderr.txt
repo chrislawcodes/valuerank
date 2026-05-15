@@ -1,0 +1,2741 @@
+Reading additional input from stdin...
+OpenAI Codex v0.130.0
+--------
+workdir: /Users/chrislaw/valuerank/.claude/worktrees/distracted-goodall-27c98d
+model: gpt-5.4-mini
+provider: openai
+approval: never
+sandbox: workspace-write [workdir, /tmp, $TMPDIR, /Users/chrislaw/.codex/memories]
+reasoning effort: high
+reasoning summaries: none
+session id: 019e2a58-ddfd-7ea3-9738-d16457f9416c
+--------
+user
+Review this spec artifact using a feasibility-adversarial lens.
+Stay scoped to that lens.
+Approach the artifact adversarially: look for hidden flaws, omitted cases, and weak assumptions before giving credit.
+Code context files are provided above. Before asserting any finding, check whether it is confirmed or refuted by the provided code. Each finding must include an evidence tag:
+  [CODE-CONFIRMED] — the code directly supports this finding
+  [CODE-REFUTED] — the code contradicts this finding (do not include as a finding)
+  [UNVERIFIED] — relevant code was not provided; treat as lower confidence
+Only assign HIGH severity to CODE-CONFIRMED findings.
+The full review artifact text is included below in this prompt.
+Return markdown using exactly these sections:
+## Findings
+## Residual Risks
+Keep the response concrete and ordered by severity.
+
+Context: models-stability.ts
+import { builder } from '../builder.js';
+import { ModelsStabilityResultRef } from '../types/models-stability.js';
+import { normalizeDomainIds } from '../../services/analysis/domain-analysis-scope.js';
+import { getWinRateStabilityResult } from '../../services/analysis/win-rate-stability/snapshot-cache.js';
+
+builder.queryField('modelsWinRateStability', (t) =>
+  t.field({
+    type: ModelsStabilityResultRef,
+    args: {
+      signature: t.arg.string({ required: false }),
+      domainId: t.arg.id({ required: false }),
+      domainIds: t.arg.idList({ required: false }),
+    },
+    resolve: async (_root, args) => {
+      const signature = args.signature != null ? String(args.signature) : null;
+      const domainId = args.domainId != null ? String(args.domainId) : null;
+      const domainIds = normalizeDomainIds(args.domainIds?.map(String) ?? null);
+
+      return getWinRateStabilityResult({
+        domainId,
+        domainIds: domainIds.length > 0 ? domainIds : null,
+        signature,
+      });
+    },
+  }),
+);
+
+
+Context: snapshot-cache.ts
+import { db } from '@valuerank/db';
+import { createLogger } from '@valuerank/shared';
+import { getBoss, isBossRunning } from '../../../queue/boss.js';
+import { DEFAULT_JOB_OPTIONS } from '../../../queue/types.js';
+import type { ModelsStabilityResultShape } from '../../../graphql/types/models-stability.js';
+import {
+  resolveDomainAnalysisSelection,
+  type DomainAnalysisSelection,
+} from '../domain-analysis-scope.js';
+import {
+  WIN_RATE_STABILITY_SNAPSHOT_CODE_VERSION,
+  WIN_RATE_STABILITY_SNAPSHOT_TYPE,
+  type WinRateStabilitySnapshotOutput,
+} from './snapshot-types.js';
+import {
+  buildWinRateStabilityAssumptionKey,
+  buildWinRateStabilityOutput,
+  normalizeWinRateStabilitySignature,
+  prepareWinRateStabilityState,
+  writeWinRateStabilitySnapshot,
+} from './snapshot-builder.js';
+import { canFastPathSnapshot } from '../snapshot-fast-path.js';
+
+const log = createLogger('win-rate-stability:cache');
+
+export type WinRateStabilityRequest = {
+  domainId: string | null;
+  domainIds: string[] | null;
+  signature: string | null;
+};
+
+function resolveSelection(request: WinRateStabilityRequest): DomainAnalysisSelection {
+  return resolveDomainAnalysisSelection({
+    domainId: request.domainId,
+    domainIds: request.domainIds,
+  });
+}
+
+export function parseWinRateStabilitySnapshotOutput(raw: unknown): WinRateStabilitySnapshotOutput | null {
+  if (raw == null || typeof raw !== 'object' || Array.isArray(raw)) return null;
+  const candidate = raw as Partial<WinRateStabilitySnapshotOutput>;
+  if (!Array.isArray(candidate.models) || !Array.isArray(candidate.skippedVignettes)) {
+    return null;
+  }
+  return { models: candidate.models, skippedVignettes: candidate.skippedVignettes };
+}
+
+export async function queueWinRateStabilityRefresh(params: {
+  request: WinRateStabilityRequest;
+  reason: string;
+}): Promise<boolean> {
+  if (!isBossRunning()) {
+    log.warn({ ...params.request, reason: params.reason }, 'Win rate stability refresh skipped — queue unavailable');
+    return false;
+  }
+
+  const selection = resolveSelection(params.request);
+  const configSignature = normalizeWinRateStabilitySignature(params.request.signature);
+  const boss = getBoss();
+  await boss.send(
+    'refresh_win_rate_stability_snapshot',
+    {
+      domainId: params.request.domainId,
+      domainIds: params.request.domainIds,
+      signature: params.request.signature,
+      reason: params.reason,
+    },
+    {
+      ...DEFAULT_JOB_OPTIONS.refresh_win_rate_stability_snapshot,
+      singletonKey: `win-rate-stability:${selection.scope}:${selection.domainId}:${configSignature}`,
+    },
+  );
+  return true;
+}
+
+export async function refreshWinRateStabilitySnapshot(request: WinRateStabilityRequest): Promise<void> {
+  const selection = resolveSelection(request);
+  const state = await prepareWinRateStabilityState({ selection, signature: request.signature });
+  const assumptionKey = buildWinRateStabilityAssumptionKey(selection.domainId);
+
+  // If a CURRENT snapshot already matches the freshly-derived input hash, the
+  // underlying data has not changed — just stamp lastValidatedAt so cache reads
+  // keep fast-pathing, and skip the rebuild.
+  const existing = await db.assumptionAnalysisSnapshot.findFirst({
+    where: {
+      assumptionKey,
+      analysisType: WIN_RATE_STABILITY_SNAPSHOT_TYPE,
+      configSignature: state.configSignature,
+      inputHash: state.inputHash,
+      status: 'CURRENT',
+      deletedAt: null,
+    },
+  });
+  if (existing != null && parseWinRateStabilitySnapshotOutput(existing.output) != null) {
+    await db.assumptionAnalysisSnapshot.update({
+      where: { id: existing.id },
+      data: { lastValidatedAt: new Date() },
+    });
+    return;
+  }
+
+  const output = await buildWinRateStabilityOutput(state);
+  await writeWinRateStabilitySnapshot({
+    scopeId: selection.domainId,
+    configSignature: state.configSignature,
+    inputHash: state.inputHash,
+    output,
+  });
+}
+
+function withReadMetadata(
+  output: WinRateStabilitySnapshotOutput,
+  cacheStatus: ModelsStabilityResultShape['cacheStatus'],
+  generatedAt: Date | null,
+): ModelsStabilityResultShape {
+  return {
+    models: output.models,
+    skippedVignettes: output.skippedVignettes,
+    cacheStatus,
+    generatedAt: generatedAt != null ? generatedAt.toISOString() : null,
+  };
+}
+
+export async function getWinRateStabilityResult(
+  request: WinRateStabilityRequest,
+): Promise<ModelsStabilityResultShape> {
+  const selection = resolveSelection(request);
+  const configSignature = normalizeWinRateStabilitySignature(request.signature);
+  const assumptionKey = buildWinRateStabilityAssumptionKey(selection.domainId);
+
+  const currentSnapshot = await db.assumptionAnalysisSnapshot.findFirst({
+    where: {
+      assumptionKey,
+      analysisType: WIN_RATE_STABILITY_SNAPSHOT_TYPE,
+      configSignature,
+      status: 'CURRENT',
+      deletedAt: null,
+    },
+    orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+  });
+
+  // Fast path: a snapshot confirmed valid recently (by an hourly warm) is
+  // trusted without re-deriving the input hash, which costs several DB
+  // round-trips in prepareWinRateStabilityState.
+  if (currentSnapshot != null && canFastPathSnapshot(currentSnapshot, WIN_RATE_STABILITY_SNAPSHOT_CODE_VERSION)) {
+    const parsed = parseWinRateStabilitySnapshotOutput(currentSnapshot.output);
+    if (parsed != null) {
+      return withReadMetadata(parsed, 'FRESH', currentSnapshot.createdAt);
+    }
+  }
+
+  // Slow path: re-derive the input hash and compare against the snapshot.
+  const state = await prepareWinRateStabilityState({ selection, signature: request.signature });
+
+  if (currentSnapshot != null) {
+    const parsed = parseWinRateStabilitySnapshotOutput(currentSnapshot.output);
+    if (parsed != null) {
+      if (currentSnapshot.inputHash === state.inputHash) {
+        return withReadMetadata(parsed, 'FRESH', currentSnapshot.createdAt);
+      }
+      const queued = await queueWinRateStabilityRefresh({ request, reason: 'page-load-stale' });
+      return withReadMetadata(parsed, queued ? 'UPDATING' : 'OUT_OF_DATE', currentSnapshot.createdAt);
+    }
+  }
+
+  // No usable snapshot — build inline. Unlike domain-analysis (whose build can
+  // take minutes), a stability build only reads one AGGREGATE analysis output
+  // per definition, so a synchronous build is acceptable for every scope.
+  // ALL_DOMAINS is also cron-warmed, so this cold-miss path is rare.
+  const output = await buildWinRateStabilityOutput(state);
+  await writeWinRateStabilitySnapshot({
+    scopeId: selection.domainId,
+    configSignature: state.configSignature,
+    inputHash: state.inputHash,
+    output,
+  });
+  return withReadMetadata(output, 'FRESH', new Date());
+}
+
+
+Context: snapshot-builder.ts
+import { db } from '@valuerank/db';
+import { getModelsFromDatabase } from '../../../config/models.js';
+import { zAnalysisOutput } from '../aggregate/contracts.js';
+import { normalizeAnalysisArtifacts } from '../normalize-analysis-output.js';
+import { computeAggregateFingerprint } from '../aggregate/aggregate-helpers.js';
+import { formatRunSignature, runMatchesSignature } from '../../../graphql/queries/domain-coverage-gql-types.js';
+import {
+  resolveDimensionKeys,
+  buildConditionGroups,
+  computeVignetteStability,
+  averageVignetteStability,
+  type VignetteStabilityStats,
+} from '../../../graphql/queries/models-stability-math.js';
+import type { ModelsStabilityResultShape } from '../../../graphql/types/models-stability.js';
+import { resolveDomainAnalysisScopeDefinitions } from '../domain-analysis-scope-loader.js';
+import type { DomainAnalysisSelection } from '../domain-analysis-scope.js';
+import {
+  WIN_RATE_STABILITY_ASSUMPTION_PREFIX,
+  WIN_RATE_STABILITY_NONE_SIGNATURE,
+  WIN_RATE_STABILITY_SNAPSHOT_CODE_VERSION,
+  WIN_RATE_STABILITY_SNAPSHOT_TYPE,
+  type WinRateStabilitySnapshotOutput,
+} from './snapshot-types.js';
+
+export type WinRateStabilityPreparedState = {
+  selection: DomainAnalysisSelection;
+  signature: string | null;
+  configSignature: string;
+  // Most-recent run per (definitionId, resolvedSignature), in display order.
+  dedupedRunIds: string[];
+  inputHash: string;
+};
+
+type PrepareRunRow = {
+  id: string;
+  definitionId: string;
+  config: unknown;
+  analysisResults: Array<{ id: string; analysisType: string }>;
+};
+
+type BuildRunRow = {
+  id: string;
+  definitionId: string;
+  definition: { name: string };
+  analysisResults: Array<{ analysisType: string; output: unknown }>;
+};
+
+type VignetteEntry = {
+  definitionId: string;
+  vignetteName: string;
+  stats: VignetteStabilityStats;
+};
+
+export function buildWinRateStabilityAssumptionKey(scopeId: string): string {
+  return `${WIN_RATE_STABILITY_ASSUMPTION_PREFIX}::${scopeId}`;
+}
+
+export function normalizeWinRateStabilitySignature(signature: string | null): string {
+  return signature ?? WIN_RATE_STABILITY_NONE_SIGNATURE;
+}
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+function extractScenarioDimensions(
+  visualizationData: Record<string, unknown> | null,
+): Record<string, Record<string, number | string>> {
+  if (visualizationData == null) return {};
+  const raw = visualizationData.scenarioDimensions;
+  if (!isPlainObject(raw)) return {};
+  const result: Record<string, Record<string, number | string>> = {};
+  for (const [scenarioId, dims] of Object.entries(raw)) {
+    if (!isPlainObject(dims)) continue;
+    const sanitized: Record<string, number | string> = {};
+    for (const [key, value] of Object.entries(dims)) {
+      if (typeof value === 'number' || typeof value === 'string') {
+        sanitized[key] = value;
+      }
+    }
+    if (Object.keys(sanitized).length > 0) {
+      result[scenarioId] = sanitized;
+    }
+  }
+  return result;
+}
+
+function extractPerScenario(
+  varianceAnalysis: Record<string, unknown> | null,
+  modelId: string,
+): Record<string, unknown> | null {
+  if (varianceAnalysis == null) return null;
+  const perModel = varianceAnalysis.perModel;
+  if (!isPlainObject(perModel)) return null;
+  const modelStats = perModel[modelId];
+  if (!isPlainObject(modelStats)) return null;
+  const perScenario = modelStats.perScenario;
+  if (!isPlainObject(perScenario)) return null;
+  return perScenario;
+}
+
+// Keep the most-recent run per (definitionId, resolvedSignature). `runs` must be
+// pre-sorted newest-first so the first occurrence per key wins.
+export function dedupeRunsBySignature<T extends { id: string; definitionId: string; config: unknown }>(
+  runs: T[],
+  signature: string | null,
+): T[] {
+  const seenKeys = new Set<string>();
+  const deduped: T[] = [];
+  for (const run of runs) {
+    const resolvedSignature = signature ?? formatRunSignature(run.config);
+    const key = `${run.definitionId}::${resolvedSignature}`;
+    if (seenKeys.has(key)) continue;
+    seenKeys.add(key);
+    deduped.push(run);
+  }
+  return deduped;
+}
+
+export async function prepareWinRateStabilityState(params: {
+  selection: DomainAnalysisSelection;
+  signature: string | null;
+}): Promise<WinRateStabilityPreparedState> {
+  const { selection, signature } = params;
+  const scopeData = await resolveDomainAnalysisScopeDefinitions({
+    scope: selection.scope,
+    domainId: selection.domainId,
+    domainIds: selection.domainIds,
+  });
+
+  const runs = (await db.run.findMany({
+    where: {
+      status: 'COMPLETED',
+      deletedAt: null,
+      tags: { some: { tag: { name: 'Aggregate' } } },
+      ...(scopeData.domains.length > 0
+        ? { definition: { domainId: { in: scopeData.domains.map((domain) => domain.id) } } }
+        : {}),
+    },
+    orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+    select: {
+      id: true,
+      definitionId: true,
+      config: true,
+      analysisResults: {
+        where: { status: 'CURRENT' },
+        select: { id: true, analysisType: true },
+      },
+    },
+  })) as PrepareRunRow[];
+
+  const scopedRuns = signature != null
+    ? runs.filter((run) => runMatchesSignature(run.config, signature))
+    : runs;
+  const dedupedRuns = dedupeRunsBySignature(scopedRuns, signature);
+
+  const definitionIds = [...new Set(dedupedRuns.map((run) => run.definitionId))];
+  const definitionRows = definitionIds.length === 0
+    ? []
+    : await db.definition.findMany({
+        where: { id: { in: definitionIds } },
+        select: { id: true, updatedAt: true },
+      });
+
+  const inputHash = computeAggregateFingerprint({
+    codeVersion: WIN_RATE_STABILITY_SNAPSHOT_CODE_VERSION,
+    scope: selection.scope,
+    domainIds: selection.domainIds.slice().sort(),
+    signature: normalizeWinRateStabilitySignature(signature),
+    // A re-summarize supersedes the old AGGREGATE analysis and creates a new
+    // row with a fresh id, so fingerprinting the CURRENT AGGREGATE id per run
+    // invalidates the cache exactly when the underlying analysis changes.
+    runs: dedupedRuns
+      .map((run) => ({
+        runId: run.id,
+        aggregateAnalysisId:
+          run.analysisResults.find((result) => result.analysisType === 'AGGREGATE')?.id ?? null,
+      }))
+      .sort((left, right) => left.runId.localeCompare(right.runId)),
+    definitions: definitionRows
+      .map((definition) => ({ id: definition.id, updatedAt: definition.updatedAt.toISOString() }))
+      .sort((left, right) => left.id.localeCompare(right.id)),
+  }).slice(0, 16);
+
+  return {
+    selection,
+    signature,
+    configSignature: normalizeWinRateStabilitySignature(signature),
+    dedupedRunIds: dedupedRuns.map((run) => run.id),
+    inputHash,
+  };
+}
+
+export async function buildWinRateStabilityOutput(
+  state: WinRateStabilityPreparedState,
+): Promise<WinRateStabilitySnapshotOutput> {
+  if (state.dedupedRunIds.length === 0) {
+    return { models: [], skippedVignettes: [] };
+  }
+
+  const activeModels = await getModelsFromDatabase({ activeOnly: true, availableOnly: false });
+
+  const runs = (await db.run.findMany({
+    where: { id: { in: state.dedupedRunIds } },
+    select: {
+      id: true,
+      definitionId: true,
+      definition: { select: { name: true } },
+      analysisResults: {
+        where: { status: 'CURRENT' },
+        select: { analysisType: true, output: true },
+      },
+    },
+  })) as BuildRunRow[];
+
+  const definitionIds = [...new Set(runs.map((run) => run.definitionId))];
+  const allScenarios = definitionIds.length === 0
+    ? []
+    : await db.scenario.findMany({
+        where: { definitionId: { in: definitionIds }, deletedAt: null },
+        select: { id: true, name: true, content: true, definitionId: true },
+      });
+  const scenariosByDefinition = new Map<string, typeof allScenarios>();
+  for (const scenario of allScenarios) {
+    const list = scenariosByDefinition.get(scenario.definitionId) ?? [];
+    list.push(scenario);
+    scenariosByDefinition.set(scenario.definitionId, list);
+  }
+
+  const skippedVignettes: ModelsStabilityResultShape['skippedVignettes'] = [];
+  const vignetteEntriesByModel = new Map<string, VignetteEntry[]>();
+  let validRunCount = 0;
+
+  for (const run of runs) {
+    const vignetteName = run.definition.name;
+    const definitionId = run.definitionId;
+
+    const analysis = run.analysisResults.find((result) => result.analysisType === 'AGGREGATE');
+    if (analysis == null) continue;
+
+    try {
+      const parsed = zAnalysisOutput.safeParse(analysis.output);
+      if (!parsed.success) {
+        skippedVignettes.push({ definitionId, vignetteName, reason: 'normalization-failed' });
+        continue;
+      }
+
+      const scenarios = scenariosByDefinition.get(definitionId) ?? [];
+      const normalized = normalizeAnalysisArtifacts({
+        visualizationData: parsed.data.visualizationData ?? null,
+        varianceAnalysis: parsed.data.varianceAnalysis ?? null,
+        scenarios,
+      });
+
+      const scenarioDimensions = extractScenarioDimensions(normalized.visualizationData);
+      const dimKeys = resolveDimensionKeys(scenarioDimensions);
+
+      if (dimKeys == null) continue;
+      if (dimKeys.inconsistent) {
+        skippedVignettes.push({ definitionId, vignetteName, reason: 'inconsistent-dimension-keys' });
+        continue;
+      }
+
+      validRunCount++;
+      const conditionGroups = buildConditionGroups(scenarioDimensions, dimKeys.keys[0], dimKeys.keys[1]);
+
+      for (const model of activeModels) {
+        const rawPerScenario = extractPerScenario(normalized.varianceAnalysis, model.modelId);
+        if (rawPerScenario == null) continue;
+
+        // Safe cast: data was validated by zAnalysisOutput above
+        const vignetteStability = computeVignetteStability(
+          conditionGroups,
+          rawPerScenario as Parameters<typeof computeVignetteStability>[1],
+        );
+        if (vignetteStability == null) continue;
+
+        const list = vignetteEntriesByModel.get(model.modelId) ?? [];
+        list.push({ definitionId, vignetteName, stats: vignetteStability });
+        vignetteEntriesByModel.set(model.modelId, list);
+      }
+    } catch {
+      skippedVignettes.push({ definitionId, vignetteName, reason: 'unexpected-error' });
+    }
+  }
+
+  if (validRunCount === 0) {
+    return { models: [], skippedVignettes };
+  }
+
+  const models: ModelsStabilityResultShape['models'] = activeModels.map((model) => {
+    const entries = vignetteEntriesByModel.get(model.modelId) ?? [];
+    const avg = averageVignetteStability(entries.map((entry) => entry.stats));
+
+    return {
+      modelId: model.modelId,
+      label: model.displayName,
+      qualifyingVignetteCount: entries.length,
+      totalTranscriptCount: entries.reduce((sum, entry) => sum + entry.stats.totalTranscriptCount, 0),
+      avgDirectionalAgreement: avg?.avgDirectionalAgreement ?? null,
+      avgExactAgreement: avg?.avgExactAgreement ?? null,
+      stableShare: avg?.stableShare ?? null,
+      softLeanShare: avg?.softLeanShare ?? null,
+      tornShare: avg?.tornShare ?? null,
+      unstableShare: avg?.unstableShare ?? null,
+      vignettes: entries.map((entry) => ({
+        definitionId: entry.definitionId,
+        vignetteName: entry.vignetteName,
+        classifiedConditionCount: entry.stats.classifiedCount,
+        stableShare: entry.stats.stableShare,
+        softLeanShare: entry.stats.softLeanShare,
+        tornShare: entry.stats.tornShare,
+        unstableShare: entry.stats.unstableShare,
+        avgDirectionalAgreement: entry.stats.avgDirectionalAgreement,
+        avgExactAgreement: entry.stats.avgExactAgreement,
+      })),
+    };
+  });
+
+  return { models, skippedVignettes };
+}
+
+export async function writeWinRateStabilitySnapshot(params: {
+  scopeId: string;
+  configSignature: string;
+  inputHash: string;
+  output: WinRateStabilitySnapshotOutput;
+}) {
+  const assumptionKey = buildWinRateStabilityAssumptionKey(params.scopeId);
+
+  await db.assumptionAnalysisSnapshot.updateMany({
+    where: {
+      assumptionKey,
+      analysisType: WIN_RATE_STABILITY_SNAPSHOT_TYPE,
+      status: 'CURRENT',
+      deletedAt: null,
+      OR: [{ configSignature: params.configSignature }, { inputHash: params.inputHash }],
+    },
+    data: { status: 'SUPERSEDED' },
+  });
+
+  return db.assumptionAnalysisSnapshot.create({
+    data: {
+      assumptionKey,
+      analysisType: WIN_RATE_STABILITY_SNAPSHOT_TYPE,
+      inputHash: params.inputHash,
+      codeVersion: WIN_RATE_STABILITY_SNAPSHOT_CODE_VERSION,
+      configSignature: params.configSignature,
+      config: { scopeId: params.scopeId, signature: params.configSignature },
+      output: params.output as object,
+      status: 'CURRENT',
+      lastValidatedAt: new Date(),
+    },
+  });
+}
+
+
+Context: snapshot-types.ts
+import type { ModelsStabilityResultShape } from '../../../graphql/types/models-stability.js';
+
+export const WIN_RATE_STABILITY_SNAPSHOT_TYPE = 'win_rate_stability';
+export const WIN_RATE_STABILITY_SNAPSHOT_CODE_VERSION = '1.0.0';
+export const WIN_RATE_STABILITY_ASSUMPTION_PREFIX = 'win-rate-stability';
+// Sentinel used in the snapshot config_signature column when the request did
+// not pin a signature. Mirrors DOMAIN_ANALYSIS_NONE_SIGNATURE.
+export const WIN_RATE_STABILITY_NONE_SIGNATURE = '__none__';
+
+export type WinRateStabilityCacheStatus = 'FRESH' | 'UPDATING' | 'OUT_OF_DATE';
+
+// The shape persisted in assumption_analysis_snapshots.output. cacheStatus and
+// generatedAt are set at read time, not stored, so they are excluded here.
+export type WinRateStabilitySnapshotOutput = Pick<
+  ModelsStabilityResultShape,
+  'models' | 'skippedVignettes'
+>;
+
+
+Context: refresh-win-rate-stability-snapshot.ts
+import type * as PgBoss from 'pg-boss';
+import { createLogger } from '@valuerank/shared';
+import type { RefreshWinRateStabilitySnapshotJobData } from '../types.js';
+import { refreshWinRateStabilitySnapshot } from '../../services/analysis/win-rate-stability/snapshot-cache.js';
+
+const log = createLogger('queue:refresh-win-rate-stability-snapshot');
+
+export function createRefreshWinRateStabilitySnapshotHandler(): PgBoss.WorkHandler<RefreshWinRateStabilitySnapshotJobData> {
+  return async (jobs: PgBoss.Job<RefreshWinRateStabilitySnapshotJobData>[]) => {
+    for (const job of jobs) {
+      const { domainId, domainIds, signature, reason } = job.data;
+      log.info({ jobId: job.id, domainId, domainIds, signature, reason }, 'Refreshing win rate stability snapshot');
+      await refreshWinRateStabilitySnapshot({ domainId, domainIds, signature });
+      log.info({ jobId: job.id, domainId, domainIds, signature, reason }, 'Win rate stability snapshot refreshed');
+    }
+  };
+}
+
+
+Context: handler-config.ts
+/**
+ * Handler configuration — queue names, types, and registration table.
+ * Extracted from index.ts to keep it under the 400-line file size limit.
+ */
+
+import type { PgBoss } from 'pg-boss';
+import type {
+  JobType,
+  ProbeScenarioJobData,
+  SummarizeTranscriptJobData,
+  AnalyzeBasicJobData,
+  ExpandScenariosJobData,
+  ComputeTokenStatsJobData,
+  RunStateReconcileJobData,
+  RunStateAuditJobData,
+  AnalysisResultJanitorJobData,
+  ProbeDeadLetterJobData,
+  AggregateAnalysisJobData,
+  RefreshDomainAnalysisSnapshotJobData,
+  RefreshPressureSensitivitySnapshotJobData,
+  RefreshWinRateStabilitySnapshotJobData,
+  StartDomainLaunchJobData,
+} from '../types.js';
+import { createProbeScenarioHandler } from './probe-scenario/index.js';
+import { createSummarizeTranscriptHandler } from './summarize-transcript.js';
+import { createAnalyzeBasicHandler } from './analyze-basic.js';
+import { createExpandScenariosHandler } from './expand-scenarios.js';
+import { createComputeTokenStatsHandler } from './compute-token-stats.js';
+import { createProbeDeadLetterHandler } from './probe-dead-letter.js';
+import { createRunStateReconcileHandler } from './run-state-reconcile.js';
+import { createRunStateAuditHandler } from './run-state-audit.js';
+import { createAnalysisResultJanitorHandler } from './analysis-result-janitor.js';
+import { createAggregateAnalysisHandler } from './aggregate-analysis.js';
+import { createRefreshDomainAnalysisSnapshotHandler } from './refresh-domain-analysis-snapshot.js';
+import { createRefreshPressureSensitivitySnapshotHandler } from './refresh-pressure-sensitivity-snapshot.js';
+import { createRefreshWinRateStabilitySnapshotHandler } from './refresh-win-rate-stability-snapshot.js';
+import { createStartDomainLaunchHandler } from './start-domain-launch.js';
+
+// Re-export job data types for handlers
+export type {
+  ProbeScenarioJobData,
+  SummarizeTranscriptJobData,
+  AnalyzeBasicJobData,
+  ExpandScenariosJobData,
+  ComputeTokenStatsJobData,
+  RunStateReconcileJobData,
+  RunStateAuditJobData,
+  AnalysisResultJanitorJobData,
+  ProbeDeadLetterJobData,
+  AggregateAnalysisJobData,
+  RefreshDomainAnalysisSnapshotJobData,
+  RefreshPressureSensitivitySnapshotJobData,
+  RefreshWinRateStabilitySnapshotJobData,
+  StartDomainLaunchJobData,
+};
+
+// Dead letter queue name for probe jobs
+export const PROBE_DEAD_LETTER_QUEUE = 'probe_dead_letter';
+
+// Handler registration info
+export type HandlerRegistration = {
+  name: JobType;
+  register: (boss: PgBoss, batchSize: number) => Promise<void>;
+};
+
+export const handlerRegistrations: HandlerRegistration[] = [
+  {
+    name: 'probe_scenario',
+    register: async (boss, batchSize) => {
+      // Register for the default probe_scenario queue (fallback)
+      await boss.work<ProbeScenarioJobData>(
+        'probe_scenario',
+        { batchSize },
+        createProbeScenarioHandler()
+      );
+    },
+  },
+  {
+    name: 'summarize_transcript',
+    register: async (boss, batchSize) => {
+      await boss.work<SummarizeTranscriptJobData>(
+        'summarize_transcript',
+        { batchSize },
+        createSummarizeTranscriptHandler()
+      );
+    },
+  },
+  {
+    name: 'analyze_basic',
+    register: async (boss, batchSize) => {
+      await boss.work<AnalyzeBasicJobData>(
+        'analyze_basic',
+        { batchSize },
+        createAnalyzeBasicHandler()
+      );
+    },
+  },
+  {
+    name: 'expand_scenarios',
+    register: async (boss, batchSize) => {
+      await boss.work<ExpandScenariosJobData>(
+        'expand_scenarios',
+        { batchSize },
+        createExpandScenariosHandler()
+      );
+    },
+  },
+  {
+    name: 'compute_token_stats',
+    register: async (boss, batchSize) => {
+      await boss.work<ComputeTokenStatsJobData>(
+        'compute_token_stats',
+        { batchSize },
+        createComputeTokenStatsHandler()
+      );
+    },
+  },
+  {
+    name: 'run_state_reconcile',
+    register: async (boss, batchSize) => {
+      await boss.work<RunStateReconcileJobData>(
+        'run_state_reconcile',
+        { batchSize },
+        createRunStateReconcileHandler()
+      );
+    },
+  },
+  {
+    name: 'run_state_audit',
+    register: async (boss, batchSize) => {
+      await boss.work<RunStateAuditJobData>(
+        'run_state_audit',
+        { batchSize },
+        createRunStateAuditHandler()
+      );
+    },
+  },
+  {
+    name: 'analysis_result_janitor',
+    register: async (boss, batchSize) => {
+      await boss.work<AnalysisResultJanitorJobData>(
+        'analysis_result_janitor',
+        { batchSize },
+        createAnalysisResultJanitorHandler()
+      );
+    },
+  },
+  {
+    name: 'probe_dead_letter',
+    register: async (boss, batchSize) => {
+      await boss.work<ProbeDeadLetterJobData>(
+        PROBE_DEAD_LETTER_QUEUE,
+        { batchSize },
+        createProbeDeadLetterHandler()
+      );
+    },
+  },
+  {
+    name: 'aggregate_analysis',
+    register: async (boss, batchSize) => {
+      await boss.work<AggregateAnalysisJobData>(
+        'aggregate_analysis',
+        { batchSize }, // Usually batchSize=1 effectively for aggregation if we want strict serial per worker
+        createAggregateAnalysisHandler()
+      );
+    },
+  },
+  {
+    name: 'refresh_domain_analysis_snapshot',
+    register: async (boss, batchSize) => {
+      await boss.work<RefreshDomainAnalysisSnapshotJobData>(
+        'refresh_domain_analysis_snapshot',
+        { batchSize },
+        createRefreshDomainAnalysisSnapshotHandler()
+      );
+    },
+  },
+  {
+    name: 'refresh_pressure_sensitivity_snapshot',
+    register: async (boss, batchSize) => {
+      await boss.work<RefreshPressureSensitivitySnapshotJobData>(
+        'refresh_pressure_sensitivity_snapshot',
+        { batchSize },
+        createRefreshPressureSensitivitySnapshotHandler()
+      );
+    },
+  },
+  {
+    name: 'refresh_win_rate_stability_snapshot',
+    register: async (boss, batchSize) => {
+      await boss.work<RefreshWinRateStabilitySnapshotJobData>(
+        'refresh_win_rate_stability_snapshot',
+        { batchSize },
+        createRefreshWinRateStabilitySnapshotHandler()
+      );
+    },
+  },
+  {
+    name: 'start_domain_launch',
+    register: async (boss, _batchSize) => {
+      const handler = createStartDomainLaunchHandler();
+      await boss.work<StartDomainLaunchJobData>(
+        'start_domain_launch',
+        // Multiple handlers can run in parallel — each one paces itself
+        // against the probe queue. batchSize=1 keeps retry semantics clean.
+        { batchSize: 1 },
+        async (jobs) => {
+          for (const job of jobs) {
+            await handler(job.data);
+          }
+        }
+      );
+    },
+  },
+];
+
+
+Context: types.ts
+/**
+ * Queue System Types
+ *
+ * Defines job types, data interfaces, and options for PgBoss queue.
+ */
+
+// Job type union
+export type JobType =
+  | 'probe_scenario'
+  | 'top_up_probes'
+  | 'summarize_transcript'
+  | 'analyze_basic'
+  | 'expand_scenarios'
+  | 'compute_token_stats'
+  | 'probe_dead_letter'
+  | 'run_state_reconcile'
+  | 'run_state_audit'
+  | 'analysis_result_janitor'
+  | 'aggregate_analysis'
+  | 'refresh_domain_analysis_snapshot'
+  | 'refresh_pressure_sensitivity_snapshot'
+  | 'refresh_win_rate_stability_snapshot'
+  | 'start_domain_launch';
+
+// Job data interfaces
+export type ProbeScenarioJobData = {
+  runId: string;
+  scenarioId: string;
+  modelId: string;
+  modelVersion?: string;
+  sampleIndex: number; // Index within sample set (0 to N-1) for multi-sample runs
+  enqueuedAt?: string;
+  config: {
+    temperature?: number;
+    seed?: number;
+    maxTurns: number;
+  };
+  // Only set by the reprobeAnomalySlot mutation. Bypasses the isRunTerminal guard
+  // so manual re-probes can execute on completed runs.
+  manualReprobe?: boolean;
+  // Set by reprobeAnomalySlot so the probe→summarize pipeline can track stage.
+  anomalyId?: string;
+};
+
+export type TopUpProbesJobData = {
+  runId: string;
+};
+
+export type SummarizeTranscriptJobData = {
+  runId: string;
+  transcriptId: string;
+  summaryModelId?: string; // Optional: defaults to configured summary model
+  forceSummarize?: boolean; // Optional: bypasses cache and summarization short-circuits
+  anomalyId?: string; // Set by reprobe pipeline to track stage progression
+  enqueuedAt?: string;
+};
+
+export type AnalyzeBasicJobData = {
+  runId: string;
+  transcriptIds?: string[]; // Optional: will be fetched from DB if not provided
+  force?: boolean; // Force recomputation even if cached
+  anomalyId?: string; // Set by reprobe pipeline to track stage progression
+};
+
+export type ExpandScenariosJobData = {
+  definitionId: string;
+  triggeredBy: 'create' | 'update' | 'fork';
+};
+
+export type ComputeTokenStatsJobData = {
+  runId: string;
+};
+
+export type RunStateReconcileJobData = {
+  runId: string;
+};
+
+export type RunStateAuditJobData = Record<string, never>;
+
+export type AnalysisResultJanitorJobData = Record<string, never>;
+
+export type AggregateAnalysisJobData = {
+  definitionId: string;
+  preambleVersionId: string | null;
+  // Optional for backward compatibility with already-queued legacy jobs.
+  definitionVersion?: number | null;
+  // Optional for backward compatibility with already-queued legacy jobs.
+  temperature?: number | null;
+};
+
+export type RefreshDomainAnalysisSnapshotJobData = {
+  scope: 'DOMAIN' | 'ALL_DOMAINS' | 'DOMAIN_SET';
+  domainId: string;
+  domainIds?: string[];
+  signature: string | null;
+  reason: string;
+};
+
+export type RefreshPressureSensitivitySnapshotJobData = {
+  domainId: string | null;
+  signature: string;
+  reason: string;
+};
+
+export type RefreshWinRateStabilitySnapshotJobData = {
+  domainId: string | null;
+  domainIds: string[] | null;
+  signature: string | null;
+  reason: string;
+};
+
+export type StartDomainLaunchJobData = {
+  domainEvaluationId: string;
+};
+
+// Dead letter job data - same as probe scenario but handled separately for failed/expired jobs
+export type ProbeDeadLetterJobData = ProbeScenarioJobData;
+
+// Job data union type (ProbeDeadLetterJobData is same as ProbeScenarioJobData, so not duplicated here)
+export type JobData =
+  | ProbeScenarioJobData
+  | TopUpProbesJobData
+  | SummarizeTranscriptJobData
+  | AnalyzeBasicJobData
+  | ExpandScenariosJobData
+  | ComputeTokenStatsJobData
+  | RunStateReconcileJobData
+  | RunStateAuditJobData
+  | AnalysisResultJanitorJobData
+  | AggregateAnalysisJobData
+  | RefreshDomainAnalysisSnapshotJobData
+  | RefreshPressureSensitivitySnapshotJobData
+  | RefreshWinRateStabilitySnapshotJobData
+  | StartDomainLaunchJobData;
+
+// Job options interface
+export type JobOptions = {
+  priority?: number;
+  retryLimit?: number;
+  retryDelay?: number;
+  retryBackoff?: boolean;
+  expireInSeconds?: number;
+  singletonKey?: string;
+};
+
+// Default job options per type
+export const DEFAULT_JOB_OPTIONS: Record<JobType, JobOptions> = {
+  'probe_scenario': {
+    retryLimit: 3,
+    retryDelay: 5,
+    retryBackoff: true,
+    // 23 hours. The zombie watchdog (services/run/recovery.ts) is the active-execution
+    // timeout; this TTL just bounds how long a probe can sit in queue before PgBoss
+    // expires it. Domain-level launches can submit tens of thousands of probes at once,
+    // so queue wait can legitimately exceed an hour. PgBoss enforces a strict <24h cap
+    // (86400 fails with "expiration cannot exceed 24 hours"), so we sit a comfortable
+    // hour under the ceiling.
+    expireInSeconds: 82800,
+  },
+  'top_up_probes': {
+    retryLimit: 0,
+    expireInSeconds: 60,
+  },
+  'summarize_transcript': {
+    retryLimit: 3,
+    retryDelay: 10,
+    retryBackoff: true,
+    expireInSeconds: 600, // 10 minutes - covers 5m Python spawn timeout + buffer
+  },
+  'analyze_basic': {
+    retryLimit: 3,
+    retryDelay: 10,
+    retryBackoff: true,
+    expireInSeconds: 600, // 10 minutes
+  },
+  'expand_scenarios': {
+    retryLimit: 2,
+    retryDelay: 10,
+    retryBackoff: true,
+    expireInSeconds: 900, // 15 minutes
+    singletonKey: 'definition', // Only one expansion per definition at a time
+  },
+  'compute_token_stats': {
+    retryLimit: 2,
+    retryDelay: 10,
+    retryBackoff: true,
+    expireInSeconds: 120, // 2 minutes - stats computation is quick
+    singletonKey: 'run', // Only one stats computation per run at a time
+  },
+  'run_state_reconcile': {
+    retryLimit: 0,
+    expireInSeconds: 120,
+  },
+  'run_state_audit': {
+    retryLimit: 0,
+    expireInSeconds: 1800,
+  },
+  'analysis_result_janitor': {
+    retryLimit: 0,
+    expireInSeconds: 600,
+  },
+  'aggregate_analysis': {
+    retryLimit: 3,
+    retryDelay: 10,
+    retryBackoff: true,
+    expireInSeconds: 300, // 5 minutes
+    // singletonKey is set dynamically based on definitionId
+  },
+  'refresh_domain_analysis_snapshot': {
+    retryLimit: 2,
+    retryDelay: 10,
+    retryBackoff: true,
+    expireInSeconds: 1200, // 20 minutes - rebuild for ALL_DOMAINS scope can be slow
+  },
+  'refresh_pressure_sensitivity_snapshot': {
+    retryLimit: 2,
+    retryDelay: 10,
+    retryBackoff: true,
+    expireInSeconds: 600, // 10 minutes — PS computation is heavier than domain analysis
+  },
+  'refresh_win_rate_stability_snapshot': {
+    retryLimit: 2,
+    retryDelay: 10,
+    retryBackoff: true,
+    expireInSeconds: 600, // 10 minutes — bounded by aggregate-run output reads
+  },
+  'start_domain_launch': {
+    retryLimit: 0, // Idempotency check inside handler covers re-entry
+    expireInSeconds: 82800, // 23 hours. PgBoss caps expiration at <24h.
+    // A domain launch can legitimately wait this long if probe queues stay
+    // saturated. Matches the probe_scenario TTL choice.
+  },
+  'probe_dead_letter': {
+    retryLimit: 0, // Don't retry dead letter jobs - just log and record
+    // 30 minutes. DLQ jobs run a single DB upsert; keep this generous so a brief DB
+    // stall during a large fanout doesn't drop failure records on the floor. Well
+    // under the PgBoss <24h cap.
+    expireInSeconds: 1800,
+  },
+};
+
+// Run progress tracking
+export type RunProgress = {
+  total: number;
+  completed: number;
+  failed: number;
+  byModel?: Record<string, { completed: number; failed: number }>;
+};
+
+// Priority values mapping
+export const PRIORITY_VALUES = {
+  LOW: 0,
+  NORMAL: 5,
+  HIGH: 10,
+} as const;
+
+export type PriorityLevel = keyof typeof PRIORITY_VALUES;
+
+// Task result for GraphQL
+export type TaskResult = {
+  scenarioId: string;
+  modelId: string;
+  status: 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED';
+  error?: string;
+  completedAt?: Date;
+};
+
+// Job handler interface
+export type JobHandler<T extends JobData> = {
+  name: JobType;
+  handler: (data: T) => Promise<void>;
+  options: JobOptions;
+};
+
+
+Context: model-agreement-on-tradeoffs.ts
+import { ValidationError } from '@valuerank/shared';
+import { builder } from '../builder.js';
+import { getModelsFromDatabase } from '../../config/models.js';
+import {
+  ModelAgreementResultRef,
+  PairDivergenceBreakdownRef,
+  type ModelAgreementResultShape,
+  type PairDivergenceBreakdownShape,
+  type ModelTrialConsistencyShape,
+  type PairwiseAgreementRowShape,
+  type ValuePairDivergenceShape,
+} from '../types/model-agreement-on-tradeoffs.js';
+import {
+  bootstrapKappaConfidence,
+  buildEmptyAgreementResult,
+  buildEmptyPairBreakdown,
+  buildPositionCells,
+  buildSelectedModels,
+  buildUnavailableModelInfo,
+  collectComparableCells,
+  computeProportionA,
+  groupCellsByVignette,
+  normalizeModelIds,
+  summarizePairCells,
+  summarizeTrialConsistency,
+  type CellOutcome,
+  type ComparableCell,
+  type CellChoice,
+} from '../../services/model-agreement/aggregation.js';
+import {
+  equalWeightAggregate,
+  isTied,
+} from '../../services/model-agreement/math.js';
+import { resolveDomainAnalysisScopeDefinitions } from '../../services/analysis/domain-analysis-scope-loader.js';
+import { resolveSignatureRuns } from '../queries/domain/shared.js';
+import { queueDomainAnalysisRefresh } from '../../services/analysis/domain-analysis-cache.js';
+import { readModelAgreementSnapshotStateFromSnapshot } from '../../services/analysis/domain-analysis-snapshot-readers.js';
+import {
+  normalizeDomainIds,
+  resolveDomainAnalysisSelection,
+  type DomainAnalysisScope,
+} from '../../services/analysis/domain-analysis-scope.js';
+import type { Context } from '../context.js';
+
+const AGREEMENT_REFRESH_REASON = 'model-agreement-on-tradeoffs-page-load-missing';
+const DRILLDOWN_REFRESH_REASON = 'model-pair-divergence-breakdown-missing';
+const NON_BINARY_CELL_FALLBACK_COUNT = 0;
+const KAPPA_BOOTSTRAP_ITERATIONS = 1000;
+
+
+async function resolveAgreementScope(params: {
+  scope: DomainAnalysisScope;
+  domainId: string;
+  domainIds: string[];
+  signature: string;
+}): Promise<{
+  scopeData: Awaited<ReturnType<typeof resolveDomainAnalysisScopeDefinitions>>;
+  resolvedSignatureRuns: Awaited<ReturnType<typeof resolveSignatureRuns>>;
+}> {
+  const scopeData = await resolveDomainAnalysisScopeDefinitions({
+    scope: params.scope,
+    domainId: params.domainId,
+    domainIds: params.domainIds,
+  });
+  const resolvedSignatureRuns = await resolveSignatureRuns(
+    scopeData.latestDefinitionIds,
+    params.signature,
+    scopeData.domain.defaultModelIds,
+  );
+
+  if (resolvedSignatureRuns.filteredSourceRunIds.length === 0) {
+    throw new ValidationError('Model agreement could not be computed because no completed runs were found for the selected scope.');
+  }
+
+  return { scopeData, resolvedSignatureRuns };
+}
+
+async function readAgreementSnapshot(params: {
+  scope: DomainAnalysisScope;
+  domainId: string;
+  domainIds: string[];
+  signature: string;
+  refreshReason: string;
+  ctx: Context;
+}): Promise<{
+  snapshot: Record<string, CellOutcome> | null;
+  buildProgress: {
+    completedRuns: number;
+    totalRuns: number;
+    currentRunId: string | null;
+    updatedAt: string;
+  } | null;
+  queued: boolean;
+}> {
+  const snapshotState = await readModelAgreementSnapshotStateFromSnapshot(
+    params.scope,
+    params.domainId,
+    params.signature,
+  );
+  if (snapshotState != null) {
+    return {
+      snapshot: snapshotState.cellLevelOutcomes,
+      buildProgress: snapshotState.buildProgress,
+      queued: true,
+    };
+  }
+
+  const queued = await queueDomainAnalysisRefresh({
+    scope: params.scope,
+    domainId: params.domainId,
+    domainIds: params.domainIds,
+    signature: params.signature,
+    reason: params.refreshReason,
+  });
+  if (queued) {
+    params.ctx.log.info(
+      { scope: params.scope, domainId: params.domainId, domainIds: params.domainIds, signature: params.signature },
+      'Model agreement snapshot not ready - rebuild queued, returning pending',
+    );
+  } else {
+    params.ctx.log.warn(
+      { scope: params.scope, domainId: params.domainId, domainIds: params.domainIds, signature: params.signature },
+      'Model agreement snapshot not ready and rebuild could not be queued',
+    );
+  }
+  return { snapshot: null, buildProgress: null, queued };
+}
+
+export async function resolveModelAgreementOnTradeoffs(
+  _root: unknown,
+  args: {
+    modelIds: ReadonlyArray<string | number>;
+    domainId?: string | number | null;
+    domainIds?: ReadonlyArray<string | number> | null;
+    scope: string;
+    signature: string;
+  },
+  ctx: Context,
+): Promise<ModelAgreementResultShape> {
+  const scopeValue = String(args.scope);
+  if (scopeValue !== 'DOMAIN' && scopeValue !== 'ALL_DOMAINS' && scopeValue !== 'DOMAIN_SET') {
+    throw new ValidationError(`Unsupported scope: ${scopeValue}`);
+  }
+  const domainIds = normalizeDomainIds((args.domainIds ?? []).map(String));
+  const domainId = args.domainId != null ? String(args.domainId).trim() : null;
+  const selection = resolveDomainAnalysisSelection({
+    scope: scopeValue,
+    domainId,
+    domainIds,
+  });
+  if (scopeValue === 'DOMAIN' && selection.scope !== 'DOMAIN') {
+    throw new ValidationError('domainId is required when scope is DOMAIN');
+  }
+  const scope: DomainAnalysisScope = selection.scope;
+
+  const signature = String(args.signature).trim();
+  if (signature.length === 0) {
+    throw new ValidationError('signature is required');
+  }
+
+  const selectedModelIds = normalizeModelIds(args.modelIds.map(String));
+  if (selectedModelIds.length < 2) {
+    throw new ValidationError('At least two distinct modelIds are required.');
+  }
+
+  const activeModels = await getModelsFromDatabase({ activeOnly: true, availableOnly: false });
+  const labelByModelId = new Map(activeModels.map((model) => [model.modelId, model.displayName] as const));
+  const selectedModels = buildSelectedModels(selectedModelIds, labelByModelId);
+  const selectedModelIdSet = new Set(selectedModels.map((model) => model.modelId));
+
+  await resolveAgreementScope({
+    scope,
+    domainId: selection.domainId,
+    domainIds: selection.domainIds,
+    signature,
+  });
+
+  const snapshotResult = await readAgreementSnapshot({
+    scope,
+    domainId: selection.domainId,
+    domainIds: selection.domainIds,
+    signature,
+    refreshReason: AGREEMENT_REFRESH_REASON,
+    ctx,
+  });
+  if (snapshotResult.snapshot == null) {
+    return buildEmptyAgreementResult(snapshotResult.queued, snapshotResult.buildProgress);
+  }
+
+  const { positionCells, cellsObservedByModelId } = buildPositionCells(snapshotResult.snapshot, selectedModelIdSet);
+  const unavailableModels = selectedModels
+    .filter((model) => (cellsObservedByModelId.get(model.modelId) ?? 0) === 0)
+    .map(buildUnavailableModelInfo);
+  const availableModels = selectedModels.filter((model) => (cellsObservedByModelId.get(model.modelId) ?? 0) > 0);
+
+  const pairwiseAgreementMatrix: PairwiseAgreementRowShape[] = [];
+  let tiedCells = 0;
+
+  for (let leftIndex = 0; leftIndex < availableModels.length; leftIndex += 1) {
+    for (let rightIndex = leftIndex + 1; rightIndex < availableModels.length; rightIndex += 1) {
+      const modelA = availableModels[leftIndex]!;
+      const modelB = availableModels[rightIndex]!;
+      const { cells, tiedCells: pairTiedCells } = collectComparableCells({
+        positionCells,
+        modelAId: modelA.modelId,
+        modelBId: modelB.modelId,
+      });
+      tiedCells += pairTiedCells;
+      const metrics = summarizePairCells(cells);
+      const cellsByVignette = groupCellsByVignette(cells);
+      const ci = await bootstrapKappaConfidence(cellsByVignette, metrics.cohensKappa, KAPPA_BOOTSTRAP_ITERATIONS);
+
+      pairwiseAgreementMatrix.push({
+        modelAId: modelA.modelId,
+        modelALabel: modelA.label,
+        modelBId: modelB.modelId,
+        modelBLabel: modelB.label,
+        totalCells: metrics.totalCells,
+        percentAgreement: metrics.percentAgreement,
+        cohensKappa: metrics.cohensKappa,
+        kappaInterpretation: metrics.kappaInterpretation,
+        meanAbsoluteDivergence: metrics.meanAbsoluteDivergence,
+        cohensKappaConfidenceLow: ci.low,
+        cohensKappaConfidenceHigh: ci.high,
+        cohensKappaConfidenceIsSymmetric: ci.isSymmetric,
+      });
+    }
+  }
+
+  pairwiseAgreementMatrix.sort((left, right) => {
+    const leftKey = `${left.modelALabel}::${left.modelBLabel}`;
+    const rightKey = `${right.modelALabel}::${right.modelBLabel}`;
+    return leftKey.localeCompare(rightKey);
+  });
+
+  const trialConsistency: ModelTrialConsistencyShape[] = availableModels
+    .map((model) => {
+      const summary = summarizeTrialConsistency({
+        positionCells,
+        modelId: model.modelId,
+      });
+      return {
+        modelId: model.modelId,
+        modelLabel: model.label,
+        cellsObserved: summary.cellsObserved,
+        meanTrialConsistency: summary.meanTrialConsistency,
+        noisy:
+          summary.meanTrialConsistency != null
+          && summary.meanTrialConsistency < 0.7
+          && summary.cellsObserved >= 5,
+      };
+    })
+    .sort((left, right) => {
+      const leftKey = `${left.modelLabel}::${left.modelId}`;
+      const rightKey = `${right.modelLabel}::${right.modelId}`;
+      return leftKey.localeCompare(rightKey);
+    });
+
+  ctx.log.debug(
+    {
+      scope,
+      domainId: selection.domainId,
+      domainIds: selection.domainIds,
+      signature,
+      selectedModelCount: selectedModels.length,
+      availableModelCount: availableModels.length,
+      pairCount: pairwiseAgreementMatrix.length,
+    },
+    'Computed model agreement on tradeoffs report',
+  );
+
+  return {
+    pending: false,
+    buildProgress: null,
+    models: availableModels,
+    unavailableModels,
+    excludedNonBinaryCells: NON_BINARY_CELL_FALLBACK_COUNT,
+    tiedCells,
+    pairwiseAgreementMatrix,
+    trialConsistency,
+  };
+}
+
+export async function resolveModelPairDivergenceBreakdown(
+  _root: unknown,
+  args: {
+    modelAId: string | number;
+    modelBId: string | number;
+    domainId?: string | number | null;
+    domainIds?: ReadonlyArray<string | number> | null;
+    scope: string;
+    signature: string;
+  },
+  ctx: Context,
+): Promise<PairDivergenceBreakdownShape> {
+  const scopeValue = String(args.scope);
+  if (scopeValue !== 'DOMAIN' && scopeValue !== 'ALL_DOMAINS' && scopeValue !== 'DOMAIN_SET') {
+    throw new ValidationError(`Unsupported scope: ${scopeValue}`);
+  }
+  const domainIds = normalizeDomainIds((args.domainIds ?? []).map(String));
+  const domainId = args.domainId != null ? String(args.domainId).trim() : null;
+  const selection = resolveDomainAnalysisSelection({
+    scope: scopeValue,
+    domainId,
+    domainIds,
+  });
+  if (scopeValue === 'DOMAIN' && selection.scope !== 'DOMAIN') {
+    throw new ValidationError('domainId is required when scope is DOMAIN');
+  }
+  const scope: DomainAnalysisScope = selection.scope;
+
+  const signature = String(args.signature).trim();
+  if (signature.length === 0) {
+    throw new ValidationError('signature is required');
+  }
+
+  const modelAId = String(args.modelAId).trim();
+  const modelBId = String(args.modelBId).trim();
+  if (modelAId.length === 0 || modelBId.length === 0) {
+    throw new ValidationError('modelAId and modelBId are required');
+  }
+  if (modelAId === modelBId) {
+    throw new ValidationError('modelAId and modelBId must be different');
+  }
+
+  const activeModels = await getModelsFromDatabase({ activeOnly: true, availableOnly: false });
+  const labelByModelId = new Map(activeModels.map((model) => [model.modelId, model.displayName] as const));
+  const modelALabel = labelByModelId.get(modelAId) ?? modelAId;
+  const modelBLabel = labelByModelId.get(modelBId) ?? modelBId;
+
+  await resolveAgreementScope({
+    scope,
+    domainId: selection.domainId,
+    domainIds: selection.domainIds,
+    signature,
+  });
+
+  const snapshotResult = await readAgreementSnapshot({
+    scope,
+    domainId: selection.domainId,
+    domainIds: selection.domainIds,
+    signature,
+    refreshReason: DRILLDOWN_REFRESH_REASON,
+    ctx,
+  });
+  if (snapshotResult.snapshot == null) {
+    return buildEmptyPairBreakdown(modelAId, modelALabel, modelBId, modelBLabel, snapshotResult.buildProgress);
+  }
+
+  const selectedModelIdSet = new Set([modelAId, modelBId]);
+  const { positionCells, cellsObservedByModelId } = buildPositionCells(snapshotResult.snapshot, selectedModelIdSet);
+  if ((cellsObservedByModelId.get(modelAId) ?? 0) === 0 || (cellsObservedByModelId.get(modelBId) ?? 0) === 0) {
+    return buildEmptyPairBreakdown(modelAId, modelALabel, modelBId, modelBLabel);
+  }
+
+  const cellsByValuePair = new Map<string, Map<string, ComparableCell[]>>();
+  for (const position of positionCells.values()) {
+    const outcomeA = position.byModelId.get(modelAId);
+    const outcomeB = position.byModelId.get(modelBId);
+    if (outcomeA == null || outcomeB == null) {
+      continue;
+    }
+
+    const proportionA = computeProportionA(outcomeA);
+    const proportionB = computeProportionA(outcomeB);
+    if (proportionA == null || proportionB == null) {
+      continue;
+    }
+
+    const modelAChoice: CellChoice = isTied(proportionA) ? 'TIED' : (proportionA > 0.5 ? 'A' : 'B');
+    const modelBChoice: CellChoice = isTied(proportionB) ? 'TIED' : (proportionB > 0.5 ? 'A' : 'B');
+
+    const cell: ComparableCell = {
+      definitionId: position.definitionId,
+      valuePairKey: `${position.canonicalA}::${position.canonicalB}`,
+      modelAProportionA: proportionA,
+      modelBProportionA: proportionB,
+      modelAChoice,
+      modelBChoice,
+      divergence: Math.abs(proportionA - proportionB),
+      agrees: modelAChoice === modelBChoice,
+    };
+
+    const byDefinition = cellsByValuePair.get(cell.valuePairKey) ?? new Map<string, ComparableCell[]>();
+    const cellsForVignette = byDefinition.get(cell.definitionId) ?? [];
+    cellsForVignette.push(cell);
+    byDefinition.set(cell.definitionId, cellsForVignette);
+    cellsByValuePair.set(cell.valuePairKey, byDefinition);
+  }
+
+  const perValuePair: ValuePairDivergenceShape[] = [];
+  for (const [valuePairKey, byDefinition] of cellsByValuePair.entries()) {
+    const [valueA, valueB] = valuePairKey.split('::');
+    if (valueA === undefined || valueB === undefined) {
+      continue;
+    }
+
+    const cellsCompared = Array.from(byDefinition.values()).reduce((sum, cells) => sum + cells.length, 0);
+    if (cellsCompared === 0) {
+      continue;
+    }
+
+    const divergences = Array.from(byDefinition.values()).map((cells) => cells.map((cell) => cell.divergence));
+    const modelAProportions = Array.from(byDefinition.values()).map((cells) => cells.map((cell) => cell.modelAProportionA));
+    const modelBProportions = Array.from(byDefinition.values()).map((cells) => cells.map((cell) => cell.modelBProportionA));
+
+    perValuePair.push({
+      valueA,
+      valueB,
+      cellsCompared,
+      meanAbsoluteDivergence: equalWeightAggregate(divergences),
+      modelAProportionA: equalWeightAggregate(modelAProportions),
+      modelBProportionA: equalWeightAggregate(modelBProportions),
+    });
+  }
+
+  perValuePair.sort((left, right) => {
+    const divergenceDelta = (right.meanAbsoluteDivergence ?? -1) - (left.meanAbsoluteDivergence ?? -1);
+    if (divergenceDelta !== 0) {
+      return divergenceDelta;
+    }
+    const leftKey = `${left.valueA}::${left.valueB}`;
+    const rightKey = `${right.valueA}::${right.valueB}`;
+    return leftKey.localeCompare(rightKey);
+  });
+
+  ctx.log.debug(
+    {
+      scope,
+      domainId: selection.domainId,
+      domainIds: selection.domainIds,
+      signature,
+      modelAId,
+      modelBId,
+      valuePairCount: perValuePair.length,
+    },
+    'Computed model pair divergence breakdown',
+  );
+
+  return {
+    pending: false,
+    buildProgress: null,
+    modelAId,
+    modelALabel,
+    modelBId,
+    modelBLabel,
+    perValuePair,
+  };
+}
+
+builder.queryField('modelAgreementOnTradeoffs', (t) =>
+  t.field({
+    type: ModelAgreementResultRef,
+    args: {
+      modelIds: t.arg.idList({ required: true }),
+      domainId: t.arg.id({ required: false }),
+      domainIds: t.arg.idList({ required: false }),
+      scope: t.arg.string({ required: true }),
+      signature: t.arg.string({ required: true }),
+    },
+    resolve: resolveModelAgreementOnTradeoffs,
+  }),
+);
+
+builder.queryField('modelPairDivergenceBreakdown', (t) =>
+  t.field({
+    type: PairDivergenceBreakdownRef,
+    args: {
+      modelAId: t.arg.id({ required: true }),
+      modelBId: t.arg.id({ required: true }),
+      domainId: t.arg.id({ required: false }),
+      domainIds: t.arg.idList({ required: false }),
+      scope: t.arg.string({ required: true }),
+      signature: t.arg.string({ required: true }),
+    },
+    resolve: resolveModelPairDivergenceBreakdown,
+  }),
+);
+
+
+Context: domain-analysis-snapshot-readers.ts
+// Read accessors over the persisted domain-analysis snapshot, used by
+// resolvers that consume snapshot output without participating in the cache
+// orchestration (refresh/queue/validation) that lives in domain-analysis-cache.
+
+import { db } from '@valuerank/db';
+import {
+  getCurrentSnapshot,
+  parseBuildProgress,
+} from './domain-analysis-cache.js';
+import { parseSnapshotOutput } from './domain-analysis-snapshot-builder.js';
+import type { DomainAnalysisScope } from './domain-analysis-scope.js';
+import type { DomainAnalysisBuildProgress } from './domain-analysis-cache-types.js';
+
+/**
+ * Read snapshot state for the modelAgreementOnTradeoffs / clustering paths:
+ * the per-cell outcomes if the snapshot has them, otherwise the buildProgress
+ * placeholder so the caller can surface an UPDATING state. Returns null when
+ * no CURRENT snapshot exists.
+ */
+export async function readModelAgreementSnapshotStateFromSnapshot(
+  scope: DomainAnalysisScope,
+  domainId: string,
+  configSignature: string,
+): Promise<{
+  cellLevelOutcomes: Record<string, { aChoices: number; bChoices: number; neutrals: number }> | null;
+  buildProgress: DomainAnalysisBuildProgress | null;
+  inputHash: string | null;
+} | null> {
+  const snapshot = await getCurrentSnapshot(db, scope, domainId, configSignature);
+  if (snapshot == null) {
+    return null;
+  }
+
+  const parsed = parseSnapshotOutput(snapshot.output);
+  if (parsed?.cellLevelOutcomes != null) {
+    return {
+      cellLevelOutcomes: parsed.cellLevelOutcomes,
+      buildProgress: null,
+      inputHash: snapshot.inputHash,
+    };
+  }
+
+  return {
+    cellLevelOutcomes: null,
+    buildProgress: parseBuildProgress(snapshot.output),
+    inputHash: snapshot.inputHash,
+  };
+}
+
+
+Context: schema.prisma
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+  // Direct connection for migrations (bypasses PgBouncer)
+  // Required because Prisma Migrate doesn't support connection pooling
+  directUrl = env("DIRECT_URL")
+}
+
+// ============================================================================
+// AUTHENTICATION
+// ============================================================================
+
+enum UserRole {
+  ADMIN
+  VISITOR
+}
+
+model User {
+  id           String    @id @default(cuid())
+  email        String    @unique
+  passwordHash String    @map("password_hash")
+  name         String?
+  role         UserRole  @default(ADMIN)
+  mustChangePassword Boolean @default(false) @map("must_change_password")
+  lastLoginAt  DateTime? @map("last_login_at")
+  passwordChangedAt DateTime? @map("password_changed_at")
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+
+  apiKeys ApiKey[]
+
+  // Audit relations
+  auditLogs          AuditLog[]
+  createdDefinitions Definition[] @relation("DefinitionCreator")
+  deletedDefinitions Definition[] @relation("DefinitionDeleter")
+  createdRuns        Run[]        @relation("RunCreator")
+  createdDomainEvaluations DomainEvaluation[] @relation("DomainEvaluationCreator")
+  deletedRuns        Run[]        @relation("RunDeleter")
+  createdTags        Tag[]        @relation("TagCreator")
+  createdLlmModels         LlmModel[]               @relation("LlmModelCreator")
+  createdBalanceSyncLogs   ProviderBalanceSyncLog[] @relation("ProviderBalanceSyncLogCreator")
+
+  @@map("users")
+}
+
+model ApiKey {
+  id        String    @id @default(cuid())
+  userId    String    @map("user_id")
+  name      String
+  keyHash   String    @unique @map("key_hash")
+  keyPrefix String    @map("key_prefix") @db.VarChar(12)
+  lastUsed  DateTime? @map("last_used")
+  expiresAt DateTime? @map("expires_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([keyPrefix])
+  @@index([userId])
+  @@map("api_keys")
+}
+
+// ============================================================================
+// OAUTH 2.1 (MCP Authentication)
+// ============================================================================
+
+model OAuthClient {
+  id                      String   @id @default(cuid())
+  clientId                String   @unique @map("client_id")
+  clientSecretHash        String   @map("client_secret_hash")
+  clientName              String?  @map("client_name")
+  redirectUris            String[] @map("redirect_uris")
+  tokenEndpointAuthMethod String   @default("client_secret_post") @map("token_endpoint_auth_method")
+  grantTypes              String[] @default(["authorization_code", "refresh_token"]) @map("grant_types")
+  responseTypes           String[] @default(["code"]) @map("response_types")
+  scope                   String   @default("mcp:read mcp:write")
+  createdAt               DateTime @default(now()) @map("created_at")
+
+  refreshTokens OAuthRefreshToken[]
+
+  @@map("oauth_clients")
+}
+
+model OAuthRefreshToken {
+  id        String   @id @default(cuid())
+  tokenHash String   @unique @map("token_hash")
+  clientId  String   @map("client_id")
+  userId    String   @map("user_id")
+  scope     String
+  resource  String
+  expiresAt DateTime @map("expires_at")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  client OAuthClient @relation(fields: [clientId], references: [clientId], onDelete: Cascade)
+
+  @@index([clientId])
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("oauth_refresh_tokens")
+}
+
+// ============================================================================
+// CORE DOMAIN
+// ============================================================================
+
+model Definition {
+  id                String    @id @default(cuid())
+  parentId          String?   @map("parent_id")
+  domainId          String?   @map("domain_id")
+  domainContextId   String?   @map("domain_context_id")
+  name              String
+  content           Json      @db.JsonB
+  expansionProgress Json?     @map("expansion_progress") @db.JsonB
+  expansionDebug    Json?     @map("expansion_debug") @db.JsonB
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime  @updatedAt @map("updated_at")
+  lastAccessedAt    DateTime? @map("last_accessed_at")
+  deletedAt         DateTime? @map("deleted_at")
+
+  // Audit fields
+  createdByUserId String? @map("created_by_user_id")
+  deletedByUserId String? @map("deleted_by_user_id")
+
+  parent   Definition?  @relation("DefinitionVersions", fields: [parentId], references: [id])
+  children Definition[] @relation("DefinitionVersions")
+  domain   Domain?      @relation(fields: [domainId], references: [id], onDelete: SetNull)
+  domainContext DomainContext? @relation(fields: [domainContextId], references: [id], onDelete: SetNull)
+
+  runs      Run[]
+  scenarios Scenario[]
+  tags      DefinitionTag[]
+  assumptionVignetteSelections AssumptionVignetteSelection[]
+
+  // Audit relations
+  createdBy User? @relation("DefinitionCreator", fields: [createdByUserId], references: [id])
+  deletedBy User? @relation("DefinitionDeleter", fields: [deletedByUserId], references: [id])
+
+  // Preamble integration
+  preambleVersionId String?          @map("preamble_version_id")
+  preambleVersion   PreambleVersion? @relation(fields: [preambleVersionId], references: [id])
+  version           Int              @default(1)
+
+  // Level preset integration
+  levelPresetVersionId String?             @map("level_preset_version_id")
+  levelPresetVersion   LevelPresetVersion? @relation(fields: [levelPresetVersionId], references: [id])
+
+  // Cost visibility - per-definition token statistics (P3)
+  tokenStatistics ModelTokenStatistics[]
+
+  @@index([parentId])
+  @@index([domainId])
+  @@index([domainContextId])
+  @@index([preambleVersionId])
+  @@index([levelPresetVersionId])
+  @@map("definitions")
+}
+
+model Domain {
+  id             String   @id @default(cuid())
+  name           String
+  normalizedName String   @unique @map("normalized_name")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  defaultLevelPresetVersionId String?             @map("default_level_preset_version_id")
+  defaultLevelPresetVersion   LevelPresetVersion? @relation(fields: [defaultLevelPresetVersionId], references: [id])
+
+  defaultPreambleVersionId String?          @map("default_preamble_version_id")
+  defaultPreambleVersion   PreambleVersion? @relation(fields: [defaultPreambleVersionId], references: [id])
+
+  defaultContextId String?        @map("default_context_id")
+  defaultContext   DomainContext? @relation("DomainDefaultContext", fields: [defaultContextId], references: [id])
+
+  defaultModelIds String[] @default([]) @map("default_model_ids")
+
+  sentencePrefix String? @map("sentence_prefix")
+  labelPrefix    String? @map("label_prefix")
+
+  definitions     Definition[]
+  contexts        DomainContext[] @relation("DomainContexts")
+  valueStatements ValueStatement[]
+  evaluations     DomainEvaluation[]
+  configSnapshots DomainConfigSnapshot[]
+
+  @@index([defaultLevelPresetVersionId])
+  @@index([defaultPreambleVersionId])
+  @@index([defaultContextId])
+  @@map("domains")
+}
+
+model DomainContext {
+  id        String   @id @default(cuid())
+  domainId  String   @map("domain_id")
+  text      String
+  version   Int      @default(1)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  domain          Domain       @relation("DomainContexts", fields: [domainId], references: [id])
+  domainsAsDefault Domain[]    @relation("DomainDefaultContext")
+  definitions     Definition[]
+  domainConfigSnapshots DomainConfigSnapshot[]
+
+  @@map("domain_contexts")
+}
+
+model ValueStatement {
+  id        String   @id @default(cuid())
+  domainId  String   @map("domain_id")
+  token     String
+  body      String
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  domain   Domain                 @relation(fields: [domainId], references: [id], onDelete: Cascade)
+  versions ValueStatementVersion[]
+
+  @@unique([domainId, token])
+  @@index([domainId])
+  @@map("value_statements")
+}
+
+model ValueStatementVersion {
+  id          String   @id @default(cuid())
+  statementId String   @map("statement_id")
+  content     String   @db.Text
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  statement ValueStatement @relation(fields: [statementId], references: [id], onDelete: Cascade)
+
+  @@index([statementId, createdAt(sort: Desc)])
+  @@map("value_statement_versions")
+}
+
+model DomainConfigSnapshot {
+  id                       String   @id @default(cuid())
+  domainId                 String   @map("domain_id")
+  preambleVersionId        String?  @map("preamble_version_id")
+  levelPresetVersionId     String?  @map("level_preset_version_id")
+  contextId                String?  @map("context_id")
+  valueStatementVersionIds String[] @map("value_statement_version_ids")
+  fingerprint              String
+  createdAt                DateTime @default(now()) @map("created_at")
+
+  domain               Domain              @relation(fields: [domainId], references: [id], onDelete: Cascade)
+  preambleVersion      PreambleVersion?    @relation(fields: [preambleVersionId], references: [id])
+  levelPresetVersion   LevelPresetVersion? @relation(fields: [levelPresetVersionId], references: [id])
+  context              DomainContext?      @relation(fields: [contextId], references: [id])
+  runs                 Run[]
+
+  @@unique([domainId, fingerprint])
+  @@index([domainId, createdAt(sort: Desc)])
+  @@map("domain_config_snapshots")
+}
+
+model Preamble {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  versions PreambleVersion[]
+
+  @@map("preambles")
+}
+
+model LevelPreset {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  versions LevelPresetVersion[]
+
+  @@map("level_presets")
+}
+
+model LevelPresetVersion {
+  id            String   @id @default(cuid())
+  levelPresetId String   @map("level_preset_id")
+  version       String
+  l1            String
+  l2            String
+  l3            String
+  l4            String
+  l5            String
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  levelPreset LevelPreset  @relation(fields: [levelPresetId], references: [id], onDelete: Cascade)
+  domains     Domain[]
+  definitions Definition[]
+  domainConfigSnapshots DomainConfigSnapshot[]
+
+  @@index([levelPresetId])
+  @@map("level_preset_versions")
+}
+
+model PreambleVersion {
+  id         String   @id @default(cuid())
+  preambleId String   @map("preamble_id")
+  version    String   // User-facing version label (e.g. "2024-02-01 12:00 PST")
+  content    String   @db.Text
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  preamble    Preamble     @relation(fields: [preambleId], references: [id], onDelete: Cascade)
+  definitions Definition[]
+  domains     Domain[]
+  domainConfigSnapshots DomainConfigSnapshot[]
+
+  @@index([preambleId])
+  @@map("preamble_versions")
+}
+
+model Tag {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  createdAt DateTime @default(now()) @map("created_at")
+
+  // Audit fields
+  createdByUserId String? @map("created_by_user_id")
+
+  definitions DefinitionTag[]
+  runs        RunTag[]
+
+  // Audit relations
+  createdBy User? @relation("TagCreator", fields: [createdByUserId], references: [id])
+
+  @@map("tags")
+}
+
+model DefinitionTag {
+  id           String    @id @default(cuid())
+  definitionId String    @map("definition_id")
+  tagId        String    @map("tag_id")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  deletedAt    DateTime? @map("deleted_at")
+
+  definition Definition @relation(fields: [definitionId], references: [id], onDelete: Cascade)
+  tag        Tag        @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@unique([definitionId, tagId])
+  @@index([definitionId])
+  @@index([tagId])
+  @@map("definition_tags")
+}
+
+model RunTag {
+  id        String   @id @default(cuid())
+  runId     String   @map("run_id")
+  tagId     String   @map("tag_id")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  run Run @relation(fields: [runId], references: [id], onDelete: Cascade)
+  tag Tag @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@unique([runId, tagId])
+  @@index([runId])
+  @@index([tagId])
+  @@map("run_tags")
+}
+
+model Run {
+  id                 String    @id @default(cuid())
+  name               String?   @map("name")
+  definitionId       String    @map("definition_id")
+  experimentId       String?   @map("experiment_id")
+  status             RunStatus @default(PENDING)
+  runCategory        RunCategory @default(UNKNOWN_LEGACY) @map("run_category")
+  config             Json      @db.JsonB
+  progress           Json?     @db.JsonB
+  summarizeProgress  Json?     @map("summarize_progress") @db.JsonB
+  stalledModels      String[]  @default([]) @map("stalled_models")
+  startedAt          DateTime? @map("started_at")
+  completedAt        DateTime? @map("completed_at")
+  createdAt          DateTime  @default(now()) @map("created_at")
+  updatedAt          DateTime  @updatedAt @map("updated_at")
+  lastAccessedAt     DateTime? @map("last_accessed_at")
+  deletedAt          DateTime? @map("deleted_at")
+  // Retention settings (for future pruning)
+  retentionDays      Int?      @map("retention_days")
+  archivePermanently Boolean   @default(true) @map("archive_permanently")
+
+  // Audit fields
+  createdByUserId String? @map("created_by_user_id")
+  deletedByUserId String? @map("deleted_by_user_id")
+
+  definition Definition  @relation(fields: [definitionId], references: [id], onDelete: Cascade)
+  experiment Experiment? @relation(fields: [experimentId], references: [id])
+  tags       RunTag[]
+
+  // Domain config snapshot at run creation time
+  domainConfigSnapshotId String?              @map("domain_config_snapshot_id")
+  domainConfigSnapshot   DomainConfigSnapshot? @relation(fields: [domainConfigSnapshotId], references: [id])
+
+  transcripts     Transcript[]
+  analysisResults AnalysisResult[]
+  domainEvaluationMembership DomainEvaluationRun?
+  baselineFor     RunComparison[]  @relation("BaselineRun")
+  comparisonFor   RunComparison[]  @relation("ComparisonRun")
+  scenarioSelections RunScenarioSelection[]
+  probeResults    ProbeResult[]
+  anomalies       RunAnomaly[]
+
+  // Audit relations
+  createdBy User? @relation("RunCreator", fields: [createdByUserId], references: [id])
+  deletedBy User? @relation("RunDeleter", fields: [deletedByUserId], references: [id])
+
+  @@index([definitionId])
+  @@index([experimentId])
+  @@index([status])
+  @@index([runCategory])
+  @@index([domainConfigSnapshotId])
+  @@map("runs")
+}
+
+model DomainEvaluation {
+  id               String                        @id @default(cuid())
+  domainId         String                        @map("domain_id")
+  domainNameAtLaunch String                      @map("domain_name_at_launch")
+  scopeCategory    DomainEvaluationScopeCategory @map("scope_category")
+  status           DomainEvaluationStatus        @default(PENDING)
+  configSnapshot   Json                          @map("config_snapshot") @db.JsonB
+  createdAt        DateTime                      @default(now()) @map("created_at")
+  startedAt        DateTime?                     @map("started_at")
+  completedAt      DateTime?                     @map("completed_at")
+  createdByUserId  String?                       @map("created_by_user_id")
+  deletedAt        DateTime?                     @map("deleted_at")
+
+  domain    Domain               @relation(fields: [domainId], references: [id], onDelete: Cascade)
+  createdBy User?                @relation("DomainEvaluationCreator", fields: [createdByUserId], references: [id])
+  members   DomainEvaluationRun[]
+
+  @@index([domainId])
+  @@index([scopeCategory])
+  @@index([status])
+  @@index([createdByUserId])
+  @@map("domain_evaluations")
+}
+
+model DomainEvaluationRun {
+  id                    String   @id @default(cuid())
+  domainEvaluationId    String   @map("domain_evaluation_id")
+  runId                 String   @unique @map("run_id")
+  definitionIdAtLaunch  String   @map("definition_id_at_launch")
+  definitionNameAtLaunch String  @map("definition_name_at_launch")
+  domainIdAtLaunch      String   @map("domain_id_at_launch")
+  createdAt             DateTime @default(now()) @map("created_at")
+  deletedAt             DateTime? @map("deleted_at")
+
+  domainEvaluation DomainEvaluation @relation(fields: [domainEvaluationId], references: [id], onDelete: Cascade)
+  run              Run              @relation(fields: [runId], references: [id], onDelete: Cascade)
+
+  @@index([domainEvaluationId])
+  @@index([definitionIdAtLaunch])
+  @@index([domainIdAtLaunch])
+  @@map("domain_evaluation_runs")
+}
+
+enum RunStatus {
+  PENDING
+  RUNNING
+  PAUSED
+  SUMMARIZING   // Probing complete, generating summaries
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+enum DomainEvaluationScopeCategory {
+  PILOT
+  PRODUCTION
+  REPLICATION
+  VALIDATION
+}
+
+enum DomainEvaluationStatus {
+  PENDING
+  RUNNING
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+enum RunCategory {
+  PILOT
+  PRODUCTION
+  REPLICATION
+  VALIDATION
+  UNKNOWN_LEGACY
+}
+
+enum RunAnomalyType {
+  STRANDED_TRANSCRIPT
+  ORPHAN_TRANSCRIPT
+  SUMMARIZING_STALL
+  MODEL_TRANSCRIPT_SHORTFALL
+  SCHEDULED_COUNT_MISMATCH
+  INVALID_RESPONSE_FAILURE
+  RESUMMARIZE_FAILED
+}
+
+enum RunAnomalySource {
+  default
+  audit
+}
+
+model Transcript {
+  id                 String    @id @default(cuid())
+  runId              String    @map("run_id")
+  scenarioId         String?   @map("scenario_id")
+  // Model versioning (renamed from target_model for consistency)
+  modelId            String    @map("model_id")
+  modelVersion       String?   @map("model_version")
+  // Multi-sample support: index within sample set (0 to N-1)
+  sampleIndex        Int       @default(0) @map("sample_index")
+  // Definition snapshot (captures exact definition at run time)
+  definitionSnapshot Json?     @map("definition_snapshot") @db.JsonB
+  // Transcript content
+  content            Json      @db.JsonB
+  turnCount          Int       @map("turn_count")
+  tokenCount         Int       @map("token_count")
+  durationMs         Int       @map("duration_ms")
+  // Cost tracking (USD, computed from token counts and model pricing)
+  estimatedCost      Float?    @map("estimated_cost")
+  createdAt          DateTime  @default(now()) @map("created_at")
+  lastAccessedAt     DateTime? @map("last_accessed_at")
+  // Retention (NULL = permanent, default)
+  contentExpiresAt   DateTime? @map("content_expires_at")
+  // Summary fields (populated after run completes).
+  // decision_code and decision_code_source columns were dropped after the
+  // remove-decisionCode PR migrated all transcripts to canonicalDecision as
+  // the single source of truth (PR #713, commit f86c2579).
+  decisionText       String?   @map("decision_text")     // LLM-generated summary
+  decisionMetadata   Json?     @map("decision_metadata") @db.JsonB
+  summarizeQueuedAt  DateTime? @map("summarize_queued_at")
+  summarizeDurationMs Int?     @map("summarize_duration_ms")
+  summarizedAt       DateTime? @map("summarized_at")     // When summary was generated
+  summarizeFailedAt  DateTime?  @map("summarize_failed_at")
+  costDebitedAt      DateTime?  @map("cost_debited_at")
+  // Soft delete
+  deletedAt          DateTime? @map("deleted_at")
+
+  run      Run       @relation(fields: [runId], references: [id], onDelete: Cascade)
+  scenario Scenario? @relation(fields: [scenarioId], references: [id])
+
+  @@index([runId])
+  @@index([scenarioId])
+  @@index([modelId])
+  @@index([deletedAt])
+  @@index([sampleIndex])
+  @@index([runId, summarizedAt])
+  @@index([runId, deletedAt, id])
+  // NOTE: This table also has a partial unique index that is not declared
+  // here because Prisma 5.7 does not support partial unique indexes in
+  // schema.prisma syntax (no WHERE clause on @@unique). The index lives in:
+  //   cloud/packages/db/prisma/migrations/20260425000000_transcripts_live_slot_unique/migration.sql
+  // It enforces uniqueness on (run_id, scenario_id, model_id, sample_index)
+  // for live, non-null-scenario, post-2026-04-10 rows. See that migration
+  // for the full predicate and rationale (PR #585 / commit 465eccc4
+  // advisory lock backstop).
+  @@map("transcripts")
+}
+
+model Scenario {
+  id           String    @id @default(cuid())
+  definitionId String    @map("definition_id")
+  name         String
+  content      Json      @db.JsonB
+  orientationFlipped Boolean @default(false) @map("orientation_flipped")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  deletedAt    DateTime? @map("deleted_at")
+
+  definition Definition @relation(fields: [definitionId], references: [id], onDelete: Cascade)
+  transcripts Transcript[]
+  runSelections RunScenarioSelection[]
+  probeResults ProbeResult[]
+  sourceAssumptionPairs AssumptionScenarioPair[] @relation("SourceAssumptionScenario")
+  variantAssumptionPairs AssumptionScenarioPair[] @relation("VariantAssumptionScenario")
+
+  @@index([definitionId])
+  @@map("scenarios")
+}
+
+model AssumptionVignetteSelection {
+  id           String   @id @default(cuid())
+  assumptionKey String  @map("assumption_key")
+  definitionId String   @map("definition_id")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  definition Definition @relation(fields: [definitionId], references: [id], onDelete: Cascade)
+
+  @@unique([assumptionKey, definitionId])
+  @@index([definitionId])
+  @@map("assumption_vignette_selections")
+}
+
+model AssumptionScenarioPair {
+  id                    String    @id @default(cuid())
+  assumptionKey         String    @map("assumption_key")
+  sourceScenarioId      String    @map("source_scenario_id")
+  variantScenarioId     String    @map("variant_scenario_id")
+  variantType           String    @map("variant_type")
+  equivalenceReviewStatus String? @map("equivalence_review_status")
+  equivalenceReviewedBy String?   @map("equivalence_reviewed_by")
+  equivalenceReviewedAt DateTime? @map("equivalence_reviewed_at")
+  equivalenceReviewNotes String?  @map("equivalence_review_notes") @db.Text
+  createdAt             DateTime  @default(now()) @map("created_at")
+
+  sourceScenario  Scenario @relation("SourceAssumptionScenario", fields: [sourceScenarioId], references: [id], onDelete: Cascade)
+  variantScenario Scenario @relation("VariantAssumptionScenario", fields: [variantScenarioId], references: [id], onDelete: Cascade)
+
+  @@unique([assumptionKey, sourceScenarioId, variantScenarioId])
+  @@index([assumptionKey])
+  @@index([sourceScenarioId])
+  @@index([variantScenarioId])
+  @@map("assumption_scenario_pairs")
+}
+
+// Join table to track which scenarios were sampled for a run
+model RunScenarioSelection {
+  id         String   @id @default(cuid())
+  runId      String   @map("run_id")
+  scenarioId String   @map("scenario_id")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  run      Run      @relation(fields: [runId], references: [id], onDelete: Cascade)
+  scenario Scenario @relation(fields: [scenarioId], references: [id], onDelete: Cascade)
+
+  @@unique([runId, scenarioId])
+  @@index([runId])
+  @@index([scenarioId])
+  @@map("run_scenario_selections")
+}
+
+// ============================================================================
+// JOB RESULTS (Probe outcome tracking)
+// ============================================================================
+
+model ProbeResult {
+  id          String            @id @default(cuid())
+  runId       String            @map("run_id")
+  scenarioId  String            @map("scenario_id")
+  modelId     String            @map("model_id")
+  // Multi-sample support: index within sample set (0 to N-1)
+  sampleIndex Int               @default(0) @map("sample_index")
+  status      ProbeResultStatus
+  // Success fields
+  transcriptId   String?        @map("transcript_id")
+  durationMs     Int?           @map("duration_ms")
+  inputTokens    Int?           @map("input_tokens")
+  outputTokens   Int?           @map("output_tokens")
+  // Failure fields
+  errorCode    String?          @map("error_code")
+  errorMessage String?          @map("error_message")
+  retryCount   Int              @default(0) @map("retry_count")
+  // Timestamps
+  queuedAt     DateTime?        @map("queued_at")
+  createdAt    DateTime         @default(now()) @map("created_at")
+  completedAt  DateTime?        @map("completed_at")
+  deletedAt    DateTime?        @map("deleted_at")
+
+  run      Run      @relation(fields: [runId], references: [id], onDelete: Cascade)
+  scenario Scenario @relation(fields: [scenarioId], references: [id], onDelete: Cascade)
+
+  // Updated unique constraint to include sampleIndex for multi-sample runs
+  @@unique([runId, scenarioId, modelId, sampleIndex])
+  @@index([runId])
+  @@index([runId, status])
+  @@index([scenarioId])
+  @@index([modelId])
+  @@index([status])
+  @@index([sampleIndex])
+  @@map("probe_results")
+}
+
+model RunAnomaly {
+  id                   String         @id @default(cuid())
+  runId                String         @map("run_id")
+  type                 RunAnomalyType
+  subject              String         @default("")
+  source               RunAnomalySource @default(default)
+  details              Json           @db.JsonB
+  firstSeenAt          DateTime       @default(now()) @map("first_seen_at")
+  lastSeenAt           DateTime       @default(now()) @map("last_seen_at")
+  resolvedAt           DateTime?      @map("resolved_at")
+  acknowledgedByUserId String?        @map("acknowledged_by_user_id")
+
+  run Run @relation(fields: [runId], references: [id], onDelete: Cascade)
+
+  @@unique([runId, type, subject, source])
+  @@index([runId])
+  @@index([type, resolvedAt])
+  @@map("run_anomalies")
+}
+
+enum ProbeResultStatus {
+  SUCCESS
+  FAILED
+}
+
+// ============================================================================
+// ANALYSIS & EXPERIMENTS
+// ============================================================================
+
+model Experiment {
+  id           String   @id @default(cuid())
+  name         String
+  hypothesis   String?
+  analysisPlan Json?    @map("analysis_plan") @db.JsonB
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  runs        Run[]
+  comparisons RunComparison[]
+
+  @@map("experiments")
+}
+
+model RunComparison {
+  id              String   @id @default(cuid())
+  experimentId    String?  @map("experiment_id")
+  baselineRunId   String   @map("baseline_run_id")
+  comparisonRunId String   @map("comparison_run_id")
+  deltaData       Json?    @map("delta_data") @db.JsonB
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  experiment    Experiment? @relation(fields: [experimentId], references: [id])
+  baselineRun   Run         @relation("BaselineRun", fields: [baselineRunId], references: [id])
+  comparisonRun Run         @relation("ComparisonRun", fields: [comparisonRunId], references: [id])
+
+  @@index([experimentId])
+  @@index([baselineRunId])
+  @@index([comparisonRunId])
+  @@map("run_comparisons")
+}
+
+model AnalysisResult {
+  id           String         @id @default(cuid())
+  runId        String         @map("run_id")
+  analysisType String         @map("analysis_type")
+  inputHash    String         @map("input_hash")
+  codeVersion  String         @map("code_version")
+  output       Json           @db.JsonB
+  status       AnalysisStatus @default(CURRENT)
+  createdAt    DateTime       @default(now()) @map("created_at")
+  // Soft delete
+  deletedAt    DateTime?      @map("deleted_at")
+
+  run Run @relation(fields: [runId], references: [id], onDelete: Cascade)
+
+  @@index([runId])
+  @@index([analysisType])
+  @@index([status])
+  @@index([deletedAt])
+  @@map("analysis_results")
+}
+
+enum AnalysisStatus {
+  CURRENT
+  SUPERSEDED
+}
+
+enum AssumptionAnalysisStatus {
+  CURRENT
+  SUPERSEDED
+}
+
+model AssumptionAnalysisSnapshot {
+  id            String                   @id @default(cuid())
+  assumptionKey String                   @map("assumption_key")
+  analysisType  String                   @map("analysis_type")
+  inputHash     String                   @map("input_hash")
+  codeVersion   String                   @map("code_version")
+  configSignature String                 @map("config_signature")
+  config        Json                     @db.JsonB
+  output        Json                     @db.JsonB
+  status        AssumptionAnalysisStatus @default(CURRENT)
+  createdAt     DateTime                 @default(now()) @map("created_at")
+  // Last time a warm/refresh confirmed this snapshot's input hash still matches
+  // the underlying data. Lets cache reads skip the expensive per-request
+  // validation when the snapshot was confirmed fresh recently. Null on rows
+  // written before this column existed — treated as "never validated".
+  lastValidatedAt DateTime?              @map("last_validated_at")
+  deletedAt     DateTime?                @map("deleted_at")
+
+  @@index([assumptionKey])
+  @@index([analysisType])
+  @@index([inputHash])
+  @@index([configSignature])
+  @@index([status])
+  @@index([deletedAt])
+  @@index([assumptionKey, analysisType, inputHash, status])
+  @@index([assumptionKey, analysisType, status, deletedAt, configSignature], map: "assumption_snapshots_models_analysis_idx")
+  @@map("assumption_analysis_snapshots")
+}
+
+model Rubric {
+  id        String   @id @default(cuid())
+  version   Int      @unique
+  content   Json     @db.JsonB
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("rubrics")
+}
+
+// ============================================================================
+// COHORTS (for segment analysis)
+// ============================================================================
+
+model Cohort {
+  id        String   @id @default(cuid())
+  name      String
+  criteria  Json     @db.JsonB
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("cohorts")
+}
+
+// ============================================================================
+// LLM PROVIDERS & MODELS
+// ============================================================================
+
+model LlmProvider {
+  id                  String   @id @default(cuid())
+  name                String   @unique
+  displayName         String   @map("display_name")
+  maxParallelRequests Int      @default(1) @map("max_parallel_requests")
+  requestsPerMinute   Int      @default(60) @map("requests_per_minute")
+  isEnabled           Boolean  @default(true) @map("is_enabled")
+  balance             Decimal? @db.Decimal(10, 4)
+  createdAt           DateTime @default(now()) @map("created_at")
+  updatedAt           DateTime @updatedAt @map("updated_at")
+
+  models          LlmModel[]
+  balanceSyncLogs ProviderBalanceSyncLog[]
+
+  @@map("llm_providers")
+}
+
+model ProviderBalanceSyncLog {
+  id                  String   @id @default(cuid())
+  providerId          String   @map("provider_id")
+  systemBalanceAtSync Decimal  @map("system_balance_at_sync") @db.Decimal(10, 4)
+  enteredBalance      Decimal  @map("entered_balance") @db.Decimal(10, 4)
+  delta               Decimal  @db.Decimal(10, 4)
+  syncedAt            DateTime @default(now()) @map("synced_at")
+  createdByUserId     String?  @map("created_by_user_id")
+
+  provider  LlmProvider @relation(fields: [providerId], references: [id], onDelete: Cascade)
+  createdBy User?       @relation("ProviderBalanceSyncLogCreator", fields: [createdByUserId], references: [id])
+
+  @@index([providerId])
+  @@map("provider_balance_sync_logs")
+}
+
+model LlmModel {
+  id                   String         @id @default(cuid())
+  providerId           String         @map("provider_id")
+  modelId              String         @map("model_id")
+  displayName          String         @map("display_name")
+  costInputPerMillion  Decimal        @map("cost_input_per_million") @db.Decimal(10, 4)
+  costOutputPerMillion Decimal        @map("cost_output_per_million") @db.Decimal(10, 4)
+  status               LlmModelStatus @default(ACTIVE)
+  isDefault            Boolean        @default(false) @map("is_default")
+  apiConfig            Json?          @map("api_config") @db.JsonB
+  createdAt            DateTime       @default(now()) @map("created_at")
+  updatedAt            DateTime       @updatedAt @map("updated_at")
+
+  // Audit fields
+  createdByUserId String? @map("created_by_user_id")
+
+  provider LlmProvider @relation(fields: [providerId], references: [id], onDelete: Cascade)
+
+  // Audit relations
+  createdBy User? @relation("LlmModelCreator", fields: [createdByUserId], references: [id])
+
+  // Cost visibility - token statistics for cost prediction
+  tokenStatistics ModelTokenStatistics[]
+
+  @@unique([providerId, modelId])
+  @@index([providerId])
+  @@index([status])
+  @@map("llm_models")
+}
+
+enum LlmModelStatus {
+  ACTIVE
+  DEPRECATED
+}
+
+model SystemSetting {
+  id        String   @id @default(cuid())
+  key       String   @unique
+  value     Json     @db.JsonB
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("system_settings")
+}
+
+// ============================================================================
+// COST VISIBILITY - Token Statistics
+// ============================================================================
+
+model ModelTokenStatistics {
+  id              String     @id @default(cuid())
+  modelId         String     @map("model_id")
+  definitionId    String?    @map("definition_id")
+  avgInputTokens  Decimal    @default(100) @map("avg_input_tokens") @db.Decimal(10, 2)
+  avgOutputTokens Decimal    @default(900) @map("avg_output_tokens") @db.Decimal(10, 2)
+  sampleCount     Int        @default(0) @map("sample_count")
+  lastUpdatedAt   DateTime   @updatedAt @map("last_updated_at")
+  createdAt       DateTime   @default(now()) @map("created_at")
+
+  model      LlmModel    @relation(fields: [modelId], references: [id], onDelete: Cascade)
+  definition Definition? @relation(fields: [definitionId], references: [id], onDelete: SetNull)
+
+  @@unique([modelId, definitionId])
+  @@index([modelId])
+  @@index([definitionId])
+  @@map("model_token_statistics")
+}
+
+// ============================================================================
+// AUDIT LOGGING
+// ============================================================================
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  action     String   // CREATE, UPDATE, DELETE, ACTION
+  entityType String   @map("entity_type")
+  entityId   String   @map("entity_id")
+  userId     String?  @map("user_id")
+  metadata   Json?    @db.JsonB
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  user User? @relation(fields: [userId], references: [id])
+
+  @@index([entityType, entityId])
+  @@index([userId])
+  @@index([createdAt])
+  @@index([action])
+  @@map("audit_logs")
+}
+
+
+Artifact: spec.md
+# Model Agreement Snapshot Cache
+
+## Summary
+
+The Model Agreement on Value Tradeoffs report on `/models` (and `/models/v2`) currently stays on a "Preparing model agreement report" state for minutes on heavy scopes. Four things on the page depend on this one computation — the agreement section, the similarity table, the kappa-clustering dendrogram in `kappa-agreement` mode, and the V2 internal-agreement overlay — so the wait is highly visible.
+
+The `modelAgreementOnTradeoffs` resolver already has snapshot-read and refresh-queue plumbing — it piggy-backs on the domain-analysis snapshot — but the rebuild stays pending long enough to feel broken in normal use. The Win Rate Stability report just got a dedicated server-side snapshot-cache (PR #1086 `perf(api): snapshot-cache modelsWinRateStability`, plus the indexing in PR #1084 and the web cache-and-network change in PR #1085) and that report is now near-instant.
+
+This feature gives the model-agreement report the same treatment: pre-computed snapshots stored in the database, a builder job triggered by new completed runs (or scheduled), a resolver that returns the cached snapshot instantly and queues a refresh on miss/stale, and a "Cached as of …" freshness chip on the page matching the existing cluster-cache chip pattern.
+
+## Goals
+
+- A cached selection's Model Agreement on Value Tradeoffs table renders in well under one second.
+- Every other agreement-derived surface on `/models` (similarity table, kappa-clustering dendrogram, V2 internal-agreement overlay) becomes instant when the snapshot exists.
+- A fresh, never-built selection still works: the existing "Preparing model agreement report" UI shows, a background build runs, the next load is instant.
+- Cache invalidates correctly when new completed runs change the underlying data — users do not see stale numbers indefinitely.
+- A "Cached as of …" freshness chip on `/models` matches the existing cluster-cache chip pattern.
+
+## Non-Goals
+
+- No changes to the kappa math, pairwise comparison logic, or what the report computes.
+- No UI redesign on `/models` or `/models/v2` beyond the freshness chip.
+- No backfill scripts beyond what the snapshot builder fills in over time as it runs.
+- No changes to the V1/V2 page structure or routing.
+- No changes to `ModelAgreementSection`'s existing "Preparing…" UI — that stays as the cold-build state.
+
+## Required Behavior
+
+### Hot path (snapshot exists)
+
+- The `modelAgreementOnTradeoffs` resolver returns the cached pairwise agreement matrix and all of its derived data (per-pair kappa, vignette-level consistency, etc.) directly from the snapshot. No live re-computation.
+- The response includes a freshness signal (a "computed at" timestamp or equivalent) so the UI can render a "Cached as of …" chip.
+- The four downstream surfaces on `/models` and `/models/v2` (agreement section, similarity table, kappa-clustering dendrogram in `kappa-agreement` mode, V2 internal-agreement overlay) all render with the cached data.
+
+### Cold path (no snapshot for this selection)
+
+- The resolver returns `pending` and queues a snapshot build for this selection.
+- The existing `ModelAgreementSection` "Preparing model agreement report" UI shows.
+- Once the build completes, the next page load (or the next poll if polling exists) returns the snapshot from the hot path.
+
+### Stale path (snapshot exists but underlying data changed)
+
+- The resolver returns the cached snapshot (so the page still loads instantly) AND queues a refresh.
+- On the next load after refresh, the snapshot is current.
+- The freshness chip still tells the user when the displayed data was computed.
+
+### Cache key
+
+- A snapshot is uniquely identified by the combination of: scope (DOMAIN / ALL_DOMAINS / DOMAIN_SET), signature, domain(s), and the model-set used for the agreement.
+- Different selections must not collide — switching domains, signatures, or model selection must serve the right snapshot (or build a new one), never the wrong one.
+
+### Cache invalidation / refresh triggers
+
+- When new completed runs land for a scope, the snapshots that cover that scope become stale and are refreshed on next access (or eagerly by the builder, depending on plan-stage choice).
+- A scheduled refresh job (mirroring the Win Rate stability pattern) keeps frequently-viewed selections current even without user-triggered refreshes — left to the plan to decide on cadence vs. event-driven.
+
+### V1 / V2 parity
+
+- The cache lives below the V1/V2 page split. Both pages benefit equally with no special-casing.
+- No existing V1 behavior changes other than instant loads and the freshness chip.
+
+## Likely Files
+
+Reference files to model the work on (the Win Rate stability pattern):
+
+- `cloud/apps/api/src/graphql/queries/models-stability.ts` — resolver pattern (thin: delegates to `getWinRateStabilityResult`)
+- `cloud/apps/api/src/services/analysis/win-rate-stability/snapshot-cache.ts` — read-from-snapshot, fall back to queue-build
+- `cloud/apps/api/src/services/analysis/win-rate-stability/snapshot-builder.ts` — actual builder
+- `cloud/apps/api/src/services/analysis/win-rate-stability/snapshot-types.ts` — shared types
+- `cloud/apps/api/src/queue/handlers/refresh-win-rate-stability-snapshot.ts` — PgBoss handler
+- `cloud/apps/api/src/queue/handlers/handler-config.ts` — handler registration
+- `cloud/apps/api/src/queue/types.ts` — queue job types
+
+Files this work will touch:
+
+- `cloud/apps/api/src/graphql/queries/model-agreement-on-tradeoffs.ts` — resolver wiring (it already reads snapshot state; behavior change depends on plan-stage architecture choice).
+- `cloud/apps/api/src/services/analysis/...` — new or extended snapshot-cache / builder / types for model-agreement (or extension of the existing domain-analysis snapshot to populate agreement data, depending on plan-stage architecture choice).
+- `cloud/apps/api/src/services/analysis/domain-analysis-snapshot-readers.ts` — currently houses `readModelAgreementSnapshotStateFromSnapshot`; may extend or be superseded.
+- `cloud/packages/db/prisma/schema.prisma` — possibly a new snapshot model (if going dedicated, Win-Rate-style), or new fields on an existing snapshot model (if extending). Includes a migration.
+- `cloud/apps/api/src/queue/handlers/` — new handler for the refresh job (if going dedicated).
+- `cloud/apps/api/src/queue/handlers/handler-config.ts` and `cloud/apps/api/src/queue/types.ts` — handler/type registration.
+- `cloud/apps/web/src/pages/ModelsGroups.tsx` (the shared `ModelGroupsView`) — small UI touch to render a "Cached as of …" chip on the page using a new freshness field from the GraphQL response.
+- `cloud/apps/web/src/components/models/ModelAgreementSection.tsx` — possibly read and surface the freshness timestamp.
+- Tests under `cloud/apps/api/src/.../__tests__` and `cloud/apps/web/tests/` for the cache-hit / cache-miss / stale / freshness-chip cases.
+
+## Acceptance Criteria
+
+- On a selection whose snapshot already exists, the Model Agreement on Value Tradeoffs table renders in well under one second after the GraphQL response — not minutes.
+- On a fresh selection with no cached snapshot, the resolver returns pending and queues a refresh; the existing "Preparing model agreement report" UI shows; subsequent loads of the same selection are near-instant.
+- The `/models` page shows a "Cached as of …" freshness indicator on the agreement-driven reports, matching the existing cluster-cache chip pattern.
+- Different selections (different scope / signature / domain(s) / model-set) get independent cache entries with no collisions — switching domains or signatures does not serve the wrong report.
+- When new completed runs change the underlying data, the snapshot is invalidated or refreshed so users do not see stale numbers indefinitely.
+- All four agreement-derived surfaces on `/models` and `/models/v2` become instant when the snapshot exists: the agreement section, the similarity table, the kappa-clustering dendrogram in `kappa-agreement` mode, and the V2 internal-agreement overlay.
+- API tests cover cache hit, cache miss (queues refresh, returns pending), and stale-then-refresh paths.
+- `npm run lint`, `npm run test`, and `npm run build` pass for the affected workspaces (api, db, web); no `@ts-ignore`, no `any`.
+- No regression to V1's rendered output on `/models` — existing tests still pass unchanged.
+
+## Risks
+
+- **Existing snapshot plumbing is already there but ineffective.** The resolver already has `readModelAgreementSnapshotStateFromSnapshot` and queues `domainAnalysisRefresh`. The user's experience says it does not actually deliver instant loads. The plan has to determine *why*: does the domain-analysis snapshot builder not compute the agreement matrix? Is the refresh queue slow? Is the snapshot invalidated too eagerly? **verification:** during plan-stage, before choosing extend-vs-replace, query a real production snapshot row for a known scope and inspect whether it contains agreement data or just cluster data. If it doesn't carry the agreement matrix at all, the existing path is naming-only and a dedicated cache is required.
+- **Cache-key collisions silently serve the wrong report.** A model-set change (e.g., adding a non-default model) must produce a different cache key. **verification:** an API test asserts that swapping one model in the selection produces a different snapshot key and a different cached payload, not a hit on the old key.
+- **Stale data shown indefinitely.** If invalidation is missed (e.g., new completed runs do not bump the relevant snapshot), users see stale numbers. **verification:** an API test inserts a new completed run for a scope and asserts the snapshot is marked stale and refreshes on next read.
+- **Snapshot build is itself the slow step.** Caching is only useful if the build eventually completes. If the build is the slow path, users still see "Preparing…" indefinitely on the first hit. **verification:** during plan-stage, measure (or estimate) the build time for a known heavy scope (e.g., All Domains × all default models) and confirm it completes within a few minutes, not hours.
+- **Cache-key cardinality explosion.** If the key includes every freely-chosen model subset, the snapshot table could grow without bound. **verification:** in plan, restrict eager pre-build to common selections (default model set per signature/scope) and let other selections build lazily on demand. The plan will state the policy explicitly.
+
+
+Return only markdown with exactly these sections:
+## Findings
+## Residual Risks
+Do not include any other sections.
+codex
+I’m checking the spec against the provided resolver and cache code, then I’ll call out only the parts that look infeasible or under-specified under that lens.
+codex
+## Findings
+- **HIGH [CODE-CONFIRMED]** The spec’s cache key is incomplete for the current resolver contract. [`modelAgreementOnTradeoffs`]( /Users/chrislaw/valuerank/.claude/worktrees/distracted-goodall-27c98d/cloud/apps/api/src/graphql/queries/model-agreement-on-tradeoffs.ts ) accepts `modelIds`, but the provided snapshot path only keys and reads by `scope`/`domainId`/`signature`. The existing cache plumbing in [`snapshot-cache.ts`]( /Users/chrislaw/valuerank/.claude/worktrees/distracted-goodall-27c98d/cloud/apps/api/src/services/analysis/win-rate-stability/snapshot-cache.ts ) shows the same pattern: singleton and lookup are built from scope plus config signature, not model selection. As written, the spec’s requirement that different model sets never collide cannot be met without a new persisted key dimension and matching read/write changes.
+
+- **MEDIUM [CODE-CONFIRMED]** The stale-path behavior is under-specified relative to the code. [`readModelAgreementSnapshotStateFromSnapshot`]( /Users/chrislaw/valuerank/.claude/worktrees/distracted-goodall-27c98d/cloud/apps/api/src/services/analysis/domain-analysis-snapshot-readers.ts ) only returns “current snapshot” data or build progress. [`resolveModelAgreementOnTradeoffs`]( /Users/chrislaw/valuerank/.claude/worktrees/distracted-goodall-27c98d/cloud/apps/api/src/graphql/queries/model-agreement-on-tradeoffs.ts ) then serves that snapshot immediately; there is no input-hash comparison, no `lastValidatedAt` check, and no refresh-on-stale branch in the shown path. The spec says stale data should be detected and refreshed, but the provided code does not support that without a new freshness mechanism.
+
+- **MEDIUM [CODE-CONFIRMED]** The spec assumes the cold build is “just a background job,” but the current agreement computation is already expensive. The live resolver path in [`model-agreement-on-tradeoffs.ts`]( /Users/chrislaw/valuerank/.claude/worktrees/distracted-goodall-27c98d/cloud/apps/api/src/graphql/queries/model-agreement-on-tradeoffs.ts ) walks the selected runs, builds pairwise comparisons, and calls `bootstrapKappaConfidence(..., 1000)` for every model pair. That means the first build can still be heavy enough to stay user-visible unless the spec also constrains selection size, model count, or the builder’s scope.
+
+## Residual Risks
+- The spec still needs an explicit canonicalization rule for model selection and domain selection before hashing. If ordering or duplicates are not normalized the same way everywhere, logically identical requests will fragment into separate cache entries.
+
+- The storage growth problem is only acknowledged, not solved. Once `modelIds` becomes part of the key, the number of snapshot variants can grow quickly unless the plan also defines retention, eviction, or a hard policy for which selections are prebuilt.
+
+- The freshness chip requires an API contract change, not just a UI change. The current shown snapshot reader path does not expose a read-time freshness timestamp, so the GraphQL shape for the `/models` consumers needs to be updated in lockstep.
+tokens used
+44,555
