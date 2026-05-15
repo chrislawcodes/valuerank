@@ -36,8 +36,11 @@ vi.mock('../../../src/graphql/queries/domain/shared.js', () => ({
 }));
 
 vi.mock('../../../src/services/analysis/domain-analysis-cache.js', () => ({
-  readModelAgreementSnapshotStateFromSnapshot: mocks.readModelAgreementSnapshotStateFromSnapshot,
   queueDomainAnalysisRefresh: mocks.queueDomainAnalysisRefresh,
+}));
+
+vi.mock('../../../src/services/analysis/domain-analysis-snapshot-readers.js', () => ({
+  readModelAgreementSnapshotStateFromSnapshot: mocks.readModelAgreementSnapshotStateFromSnapshot,
 }));
 
 const log = createLogger('test:model-agreement');
