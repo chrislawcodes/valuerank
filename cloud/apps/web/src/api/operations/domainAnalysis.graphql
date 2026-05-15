@@ -37,6 +37,7 @@ query DomainAnalysis($domainId: ID, $domainIds: [ID!], $scope: String, $signatur
     models {
       model
       label
+      neutralRate
       values {
         valueKey
         score

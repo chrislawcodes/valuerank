@@ -809,6 +809,7 @@ type DomainAnalysisMissingDefinition {
 type DomainAnalysisModel {
   label: String!
   model: String!
+  neutralRate: Float
   pairwiseWinRateModel: PairwiseWinRateModel
   rankingShape: RankingShape!
   values: [DomainAnalysisValueScore!]!

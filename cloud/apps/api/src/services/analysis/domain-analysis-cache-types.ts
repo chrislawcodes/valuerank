@@ -5,6 +5,7 @@ import type {
   DomainAnalysisValueCounts,
   resolveSignatureRuns,
 } from '../../graphql/queries/domain/shared.js';
+import type { PairwiseWinRateModel } from '../../graphql/queries/domain/types.js';
 import type { DomainAnalysisScope } from './domain-analysis-scope.js';
 
 export const DOMAIN_ANALYSIS_CACHE_STATUS = {
@@ -17,7 +18,9 @@ export type DomainAnalysisCacheStatus =
   (typeof DOMAIN_ANALYSIS_CACHE_STATUS)[keyof typeof DOMAIN_ANALYSIS_CACHE_STATUS];
 
 export const DOMAIN_ANALYSIS_SNAPSHOT_TYPE = 'domain_overview';
-export const DOMAIN_ANALYSIS_SNAPSHOT_CODE_VERSION = '1.13.0';
+// v1.14.0: pairwise matrices are vignette-averaged (not pooled by trial count)
+// and per-model condition-weighted neutralRate is stored.
+export const DOMAIN_ANALYSIS_SNAPSHOT_CODE_VERSION = '1.14.0';
 export const DOMAIN_ANALYSIS_ASSUMPTION_PREFIX = 'domain-analysis';
 export const DOMAIN_ANALYSIS_NONE_SIGNATURE = '__none__';
 
@@ -33,15 +36,22 @@ export type DomainAnalysisBuildProgress = {
 export type DomainAnalysisSnapshotModel = {
   model: string;
   counts: Record<string, DomainAnalysisValueCounts>;
-  pairwiseWins: Record<string, Record<string, number>>;
-  // Per-pair neutral counts keyed by [winner][loser] (only stored from valueA side to avoid
-  // double-counting). Optional for backward compat with snapshots built before v1.9.0.
+  // Legacy pooled per-pair win/neutral count maps. Superseded by
+  // `pairwiseWinRateModel` (vignette-averaged) in v1.14.0. Optional — kept only
+  // so snapshots built before v1.14.0 can still be read.
+  pairwiseWins?: Record<string, Record<string, number>>;
   pairwiseNeutrals?: Record<string, Record<string, number>>;
+  // Vignette-averaged pairwise win-rate matrices (v1.14.0+). Optional for
+  // backward compatibility with snapshots built before v1.14.0.
+  pairwiseWinRateModel?: PairwiseWinRateModel;
   // Equal-weight per-vignette win rates (0–100) and vignette counts per value key.
   // Optional for backward compatibility with snapshots built before v1.3.0.
   valueWinRates?: Record<string, number>;
   valueWinRatesExcNeutral?: Record<string, number>;
   vignetteCount?: Record<string, number>;
+  // Condition-weighted neutral rate (0–1 fraction), v1.14.0+. Optional for
+  // backward compatibility with snapshots built before v1.14.0.
+  neutralRate?: number | null;
 };
 
 export type DomainAnalysisContributionSummary = {

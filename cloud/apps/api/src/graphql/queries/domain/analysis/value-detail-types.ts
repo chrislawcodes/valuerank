@@ -52,6 +52,16 @@ export function mapVignette(vignette: MutableVignette): DomainAnalysisVignetteDe
   const conditions: DomainAnalysisConditionDetail[] = Array.from(vignette.conditions.values())
     .sort((left, right) => left.conditionName.localeCompare(right.conditionName))
     .map(mapCondition);
+  // Equal-weight the per-condition win rates rather than pooling raw trial
+  // counts, so conditions with more trials don't dominate the vignette rate.
+  // This matches the per-vignette averaging used everywhere else on the Win
+  // Rate page (see value-win-rate-aggregation.ts).
+  const conditionRates = conditions
+    .map((condition) => condition.selectedValueWinRate)
+    .filter((rate): rate is number => rate !== null);
+  const selectedValueWinRate = conditionRates.length > 0
+    ? conditionRates.reduce((sum, rate) => sum + rate, 0) / conditionRates.length
+    : null;
   return {
     definitionId: vignette.definitionId,
     definitionName: vignette.definitionName,
@@ -62,7 +72,7 @@ export function mapVignette(vignette: MutableVignette): DomainAnalysisVignetteDe
     deprioritized: vignette.deprioritized,
     neutral: vignette.neutral,
     totalTrials: vignette.totalTrials,
-    selectedValueWinRate: computePairwiseWinRate(vignette.prioritized, vignette.deprioritized, vignette.neutral),
+    selectedValueWinRate,
     conditions,
   };
 }
