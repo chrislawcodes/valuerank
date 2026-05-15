@@ -2,7 +2,7 @@
 
 ## Status
 
-- Slice 1a (extract compute service): not started
+- Slice 1a (extract compute service): complete (commit 4d80a543)
 - Slice 1b (Prisma model + types): not started
 - Slice 1c (helpers + tests): not started
 - Slice 2: not started
@@ -23,10 +23,10 @@ Files in scope:
 - `cloud/apps/api/src/graphql/queries/model-agreement-on-tradeoffs.ts` (resolver delegates live-path compute to the new service; same shape, same data)
 - `cloud/apps/api/tests/services/model-agreement/compute.test.ts` (new)
 
-- [ ] In `cloud/apps/api/src/services/model-agreement/compute.ts`, add an async function `computeModelAgreement(prisma, input)` that takes a snapshot-shaped input (`{ scope: 'DOMAIN' | 'ALL_DOMAINS' | 'DOMAIN_SET', signature: string, domainIds: string[], modelIds: string[] }`) and returns the same `ModelAgreementResult` payload (pairwise matrix + derived fields) the live resolver currently produces inline. Move the computation logic from `resolveModelAgreementOnTradeoffs` (in `cloud/apps/api/src/graphql/queries/model-agreement-on-tradeoffs.ts`) into this function. Reuse the existing helpers under `cloud/apps/api/src/services/model-agreement/` (aggregation, math, bootstrap). Pass Prisma + any other dependencies explicitly through the function signature — no resolver-context coupling.
-- [ ] In `cloud/apps/api/src/graphql/queries/model-agreement-on-tradeoffs.ts`, replace the inlined live-path computation with a call to `computeModelAgreement`. The resolver's GraphQL contract and returned data are unchanged — this is purely a refactor that moves code without changing behavior.
-- [ ] In `cloud/apps/api/tests/services/model-agreement/compute.test.ts`, add a small unit test that calls `computeModelAgreement` on a seeded fixture and asserts the returned `pairwiseAgreementMatrix` matches expected values for a known input.
-- [ ] From `cloud/`, run `npm run lint --workspace @valuerank/api`, `npm run test --workspace @valuerank/api` (with `DATABASE_URL` + `JWT_SECRET`), and `npm run build --workspace @valuerank/api`. The existing `model-agreement-on-tradeoffs` tests MUST pass unchanged — that's the extraction's regression gate. No `any`, no `@ts-ignore`. Commit the slice.
+- [x] In `cloud/apps/api/src/services/model-agreement/compute.ts`, add an async function `computeModelAgreement(prisma, input)` that takes a snapshot-shaped input (`{ scope: 'DOMAIN' | 'ALL_DOMAINS' | 'DOMAIN_SET', signature: string, domainIds: string[], modelIds: string[] }`) and returns the same `ModelAgreementResult` payload (pairwise matrix + derived fields) the live resolver currently produces inline. Move the computation logic from `resolveModelAgreementOnTradeoffs` (in `cloud/apps/api/src/graphql/queries/model-agreement-on-tradeoffs.ts`) into this function. Reuse the existing helpers under `cloud/apps/api/src/services/model-agreement/` (aggregation, math, bootstrap). Pass Prisma + any other dependencies explicitly through the function signature — no resolver-context coupling.
+- [x] In `cloud/apps/api/src/graphql/queries/model-agreement-on-tradeoffs.ts`, replace the inlined live-path computation with a call to `computeModelAgreement`. The resolver's GraphQL contract and returned data are unchanged — this is purely a refactor that moves code without changing behavior.
+- [x] In `cloud/apps/api/tests/services/model-agreement/compute.test.ts`, add a small unit test that calls `computeModelAgreement` on a seeded fixture and asserts the returned `pairwiseAgreementMatrix` matches expected values for a known input.
+- [x] From `cloud/`, run `npm run lint --workspace @valuerank/api`, `npm run test --workspace @valuerank/api` (with `DATABASE_URL` + `JWT_SECRET`), and `npm run build --workspace @valuerank/api`. The existing `model-agreement-on-tradeoffs` tests MUST pass unchanged — that's the extraction's regression gate. No `any`, no `@ts-ignore`. Commit the slice.
 - [CHECKPOINT]
 
 ## Slice 1b: Prisma snapshot model + migration + shared types
