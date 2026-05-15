@@ -130,6 +130,25 @@
       "duration_seconds": 48.997165,
       "agent_id": null,
       "artifact_sha_at_time": "9469ccd3a1bf4a627b474af9a373f144b236cd01499b72b5b816884962183a61"
+    },
+    {
+      "stage": "tasks",
+      "round": 1,
+      "activity_type": "implementation",
+      "model": "gpt-5.4-mini",
+      "lens": null,
+      "prompt_chars": 52128,
+      "prompt_cap": null,
+      "input_tokens": null,
+      "output_tokens": null,
+      "cost_usd_estimate": null,
+      "timestamp": "2026-05-15T07:51:44.263755Z",
+      "started_at": "2026-05-15T06:51:44.246924Z",
+      "ended_at": "2026-05-15T07:51:44.263755Z",
+      "duration_seconds": 3600.014615,
+      "agent_id": null,
+      "artifact_sha_at_time": "737b377efd1fc7f43018a23f52985751e01aca4aa493cfd4532bfde3d3f6ffe3",
+      "parse_error": "no Codex token block found in stderr"
     }
   ],
   "command_telemetry": [
@@ -261,5 +280,49 @@
     "blockers": []
   },
   "plan_adversarial_rounds": 1,
-  "tasks_adversarial_rounds": 1
+  "tasks_adversarial_rounds": 1,
+  "heartbeats": [
+    {
+      "timestamp_pt": "2026-05-15T00:01:44.247322-07:00",
+      "timestamp_utc": "2026-05-15T07:01:44.247445+00:00",
+      "stage": "implement",
+      "activity": "codex exec running",
+      "elapsed_ms": 600002
+    },
+    {
+      "timestamp_pt": "2026-05-15T00:11:44.259232-07:00",
+      "timestamp_utc": "2026-05-15T07:11:44.259256+00:00",
+      "stage": "implement",
+      "activity": "codex exec running",
+      "elapsed_ms": 1200012
+    },
+    {
+      "timestamp_pt": "2026-05-15T00:21:44.266657-07:00",
+      "timestamp_utc": "2026-05-15T07:21:44.266678+00:00",
+      "stage": "implement",
+      "activity": "codex exec running",
+      "elapsed_ms": 1800019
+    },
+    {
+      "timestamp_pt": "2026-05-15T00:31:44.276695-07:00",
+      "timestamp_utc": "2026-05-15T07:31:44.276718+00:00",
+      "stage": "implement",
+      "activity": "codex exec running",
+      "elapsed_ms": 2400028
+    },
+    {
+      "timestamp_pt": "2026-05-15T00:41:44.286295-07:00",
+      "timestamp_utc": "2026-05-15T07:41:44.286314+00:00",
+      "stage": "implement",
+      "activity": "codex exec running",
+      "elapsed_ms": 3000038
+    },
+    {
+      "timestamp_pt": "2026-05-15T00:51:44.294991-07:00",
+      "timestamp_utc": "2026-05-15T07:51:44.295004+00:00",
+      "stage": "implement",
+      "activity": "codex exec running",
+      "elapsed_ms": 3600046
+    }
+  ]
 }

@@ -2,41 +2,65 @@
 
 ## Status
 
-- Slice 1: not started
+- Slice 1a (extract compute service): not started
+- Slice 1b (Prisma model + types): not started
+- Slice 1c (helpers + tests): not started
 - Slice 2: not started
 - Slice 3: not started
 - Slice 4: not started
 - API + web lint / test / build: not run
 - Production smoke (post-deploy): not run
 
-## Slice 1: Foundations — extract compute, Prisma model, canonical-key, fingerprint
+> Note: Slice 1 was split into 1a / 1b / 1c after the original Slice 1 dispatch (~12 task lines, ~52k-char prompt) timed out in Codex after 60 minutes with zero output. Each sub-slice is now self-contained, smaller in prompt size, and committable independently.
 
-Pre-requisite work that de-risks the rest. Extract the existing live agreement computation into a standalone service so both the live resolver path and the new snapshot builder use it. Add the Prisma model, the canonical-key helper, and the fingerprint helper. Full requirements are in spec.md and plan.md (Architecture Choices 1, 3, 4, 7 and Slice 1).
+## Slice 1a: Extract live computation into a service
+
+The smallest, most isolated prep step. Extract the existing live agreement computation in `resolveModelAgreementOnTradeoffs` into a standalone service. No new files in the snapshot directory yet, no Prisma changes, no helpers — just a behavior-preserving refactor of existing code. The existing resolver tests are the regression gate. See plan.md Architecture Choice 7.
 
 Files in scope:
 
 - `cloud/apps/api/src/services/model-agreement/compute.ts` (new)
-- `cloud/apps/api/src/graphql/queries/model-agreement-on-tradeoffs.ts` (resolver delegates live-path compute to the new service)
+- `cloud/apps/api/src/graphql/queries/model-agreement-on-tradeoffs.ts` (resolver delegates live-path compute to the new service; same shape, same data)
 - `cloud/apps/api/tests/services/model-agreement/compute.test.ts` (new)
+
+- [ ] In `cloud/apps/api/src/services/model-agreement/compute.ts`, add an async function `computeModelAgreement(prisma, input)` that takes a snapshot-shaped input (`{ scope: 'DOMAIN' | 'ALL_DOMAINS' | 'DOMAIN_SET', signature: string, domainIds: string[], modelIds: string[] }`) and returns the same `ModelAgreementResult` payload (pairwise matrix + derived fields) the live resolver currently produces inline. Move the computation logic from `resolveModelAgreementOnTradeoffs` (in `cloud/apps/api/src/graphql/queries/model-agreement-on-tradeoffs.ts`) into this function. Reuse the existing helpers under `cloud/apps/api/src/services/model-agreement/` (aggregation, math, bootstrap). Pass Prisma + any other dependencies explicitly through the function signature — no resolver-context coupling.
+- [ ] In `cloud/apps/api/src/graphql/queries/model-agreement-on-tradeoffs.ts`, replace the inlined live-path computation with a call to `computeModelAgreement`. The resolver's GraphQL contract and returned data are unchanged — this is purely a refactor that moves code without changing behavior.
+- [ ] In `cloud/apps/api/tests/services/model-agreement/compute.test.ts`, add a small unit test that calls `computeModelAgreement` on a seeded fixture and asserts the returned `pairwiseAgreementMatrix` matches expected values for a known input.
+- [ ] From `cloud/`, run `npm run lint --workspace @valuerank/api`, `npm run test --workspace @valuerank/api` (with `DATABASE_URL` + `JWT_SECRET`), and `npm run build --workspace @valuerank/api`. The existing `model-agreement-on-tradeoffs` tests MUST pass unchanged — that's the extraction's regression gate. No `any`, no `@ts-ignore`. Commit the slice.
+- [CHECKPOINT]
+
+## Slice 1b: Prisma snapshot model + migration + shared types
+
+Add the `ModelAgreementSnapshot` Prisma model, generate its migration, and create the shared types file that later slices import. No business logic yet.
+
+Files in scope:
+
 - `cloud/packages/db/prisma/schema.prisma`
 - `cloud/packages/db/prisma/migrations/<timestamp>_add_model_agreement_snapshot/migration.sql`
 - `cloud/apps/api/src/services/analysis/model-agreement-snapshot/snapshot-types.ts` (new)
+
+- [ ] In `cloud/packages/db/prisma/schema.prisma`, add a `ModelAgreementSnapshot` model with fields: `id String @id @default(cuid())`, `scope String`, `signature String`, `domainIdsHash String @db.Char(32)`, `modelIdsHash String @db.Char(32)`, `domainIds String[]`, `modelIds String[]`, `agreementResultJson Json`, `sourceRunCount Int`, `sourceRunUpdatedAtSum BigInt`, `algorithmVersion Int`, `computedAt DateTime`, `createdAt DateTime @default(now())`, `updatedAt DateTime @updatedAt`. Add `@@unique([scope, signature, domainIdsHash, modelIdsHash])` and `@@index([scope, signature])`.
+- [ ] Generate the migration via `DATABASE_URL=... npx prisma migrate dev --name add_model_agreement_snapshot --schema cloud/packages/db/prisma/schema.prisma`. Inspect the generated `migration.sql` and confirm it contains only `CREATE TABLE` + `CREATE INDEX` / `CREATE UNIQUE INDEX` statements on the new `model_agreement_snapshots` table (snake_cased) — NO `ALTER TABLE` against existing tables.
+- [ ] In `cloud/apps/api/src/services/analysis/model-agreement-snapshot/snapshot-types.ts`, export `ModelAgreementSnapshotInput` and `ModelAgreementSnapshotPayload` types matching the shape `computeModelAgreement` returns (from Slice 1a), plus a `ModelAgreementSnapshotSource` string-literal union: `'CACHE_HIT' | 'CACHE_HIT_STALE' | 'LIVE_NON_CANONICAL' | 'BUILDING'`, and a constant `AGREEMENT_ALGORITHM_VERSION = 1`. Add a top-of-file comment stating: "Bump AGREEMENT_ALGORITHM_VERSION whenever the agreement computation changes — it is part of the snapshot freshness check and old rows become stale on read when this changes."
+- [ ] From `cloud/`, run `npm run lint --workspace @valuerank/db`, `npm run lint --workspace @valuerank/api`, and `npm run build --workspace @valuerank/api`. No `any`, no `@ts-ignore`. Commit the slice (migration + schema + types together).
+- [CHECKPOINT]
+
+## Slice 1c: Canonical-key and fingerprint helpers + tests
+
+The two pure helpers used by both the snapshot reader and writer.
+
+Files in scope:
+
 - `cloud/apps/api/src/services/analysis/model-agreement-snapshot/canonical-key.ts` (new)
 - `cloud/apps/api/src/services/analysis/model-agreement-snapshot/fingerprint.ts` (new)
 - `cloud/apps/api/tests/services/analysis/model-agreement-snapshot/canonical-key.test.ts` (new)
 - `cloud/apps/api/tests/services/analysis/model-agreement-snapshot/fingerprint.test.ts` (new)
 
-- [ ] In `cloud/apps/api/src/services/model-agreement/compute.ts`, extract the agreement computation currently inlined in `resolveModelAgreementOnTradeoffs` (cloud/apps/api/src/graphql/queries/model-agreement-on-tradeoffs.ts) into a standalone async function `computeModelAgreement(prisma, input)` that takes a snapshot-shaped input (`{ scope, signature, domainIds, modelIds }`) and returns the `ModelAgreementSnapshotPayload` (the pairwise matrix + derived fields). Pass Prisma + any other dependencies explicitly through the function signature — no resolver-context coupling. Reuse the existing helpers under `cloud/apps/api/src/services/model-agreement/` (aggregation, math, bootstrap).
-- [ ] In `cloud/apps/api/src/graphql/queries/model-agreement-on-tradeoffs.ts`, replace the inlined live-path computation with a call to `computeModelAgreement`. No behavior change for the live path — the resolver still returns the same shape with the same data.
-- [ ] In `cloud/apps/api/tests/services/model-agreement/compute.test.ts`, add unit tests for `computeModelAgreement` with a small fixture (a known input, expected pairwise matrix output). Run the existing API tests for `model-agreement-on-tradeoffs` and confirm they pass unchanged — that's the extraction's regression gate.
-- [ ] In `cloud/packages/db/prisma/schema.prisma`, add a `ModelAgreementSnapshot` model: `id String @id`, `scope String` (DOMAIN | ALL_DOMAINS | DOMAIN_SET), `signature String`, `domainIdsHash Char(32)`, `modelIdsHash Char(32)`, `domainIds String[]`, `modelIds String[]`, `agreementResultJson Json`, `sourceRunCount Int`, `sourceRunUpdatedAtSum BigInt`, `algorithmVersion Int`, `computedAt DateTime`, `createdAt DateTime @default(now())`, `updatedAt DateTime @updatedAt`. Unique index on `(scope, signature, domainIdsHash, modelIdsHash)`; secondary index on `(scope, signature)`.
-- [ ] Generate the migration via `npx prisma migrate dev --name add_model_agreement_snapshot --schema cloud/packages/db/prisma/schema.prisma` (DATABASE_URL pointing at the local dev DB). Inspect the generated migration.sql — confirm it only contains CREATE TABLE / CREATE INDEX statements on the new table, no ALTER TABLE on existing tables.
-- [ ] In `cloud/apps/api/src/services/analysis/model-agreement-snapshot/snapshot-types.ts`, export `ModelAgreementSnapshotInput`, `ModelAgreementSnapshotPayload`, the `ModelAgreementSnapshotSource` enum (`CACHE_HIT | CACHE_HIT_STALE | LIVE_NON_CANONICAL | BUILDING`), and an `AGREEMENT_ALGORITHM_VERSION = 1` constant. The constant must be human-bumped any time the agreement computation changes — document this in a top-of-file comment.
-- [ ] In `cloud/apps/api/src/services/analysis/model-agreement-snapshot/canonical-key.ts`, export `canonicalKey({ scope, signature, domainIds, modelIds })` → `{ domainIdsHash, modelIdsHash }`. Dedupe each list, sort lexicographically **case-sensitive** (do NOT lowercase), then SHA-256, then take the first 32 hex characters.
-- [ ] In `cloud/apps/api/src/services/analysis/model-agreement-snapshot/fingerprint.ts`, export `computeInputFingerprint(prisma, { scope, signature, domainIds, modelIds })` → `{ sourceRunCount: number, sourceRunUpdatedAtSum: bigint }`. Single Prisma raw SELECT with `COUNT(*)` and `SUM(EXTRACT(EPOCH FROM "updatedAt"))::BIGINT` over the source runs in scope.
-- [ ] In `canonical-key.test.ts`, assert: `["a","b","c"]`, `["c","a","b"]`, and `["b","a","b","c"]` produce the same hash; `"Claude"` and `"claude"` produce DIFFERENT hashes; empty list distinct from single-item list; output is exactly 32 hex characters.
-- [ ] In `fingerprint.test.ts` (with `DATABASE_URL` + `JWT_SECRET`), seed runs, compute fingerprint, then: insert a new run → fingerprint changes; delete an existing run → fingerprint changes; update a non-latest run's `updatedAt` → fingerprint changes (this is the key case that count+max would miss); repeated calls with no DB changes return identical values.
-- [ ] From `cloud/`, run `npm run lint --workspace @valuerank/db`, `npm run lint --workspace @valuerank/api`, `npm run test --workspace @valuerank/api` (with `DATABASE_URL` + `JWT_SECRET`), and `npm run build --workspace @valuerank/api`. Fix all errors. Do not use `any` or `@ts-ignore`. Commit the slice.
+- [ ] In `cloud/apps/api/src/services/analysis/model-agreement-snapshot/canonical-key.ts`, export `canonicalKey({ scope, signature, domainIds, modelIds })` returning `{ domainIdsHash: string, modelIdsHash: string }`. For each ID list: dedupe (Set), sort lexicographically with `Array.prototype.sort()` (default case-sensitive lexical order — do NOT lowercase), join with a delimiter, then SHA-256 (use `node:crypto`), then take the first 32 hex characters. Empty list hashes to the empty-string hash (so empty and single-item lists differ).
+- [ ] In `cloud/apps/api/src/services/analysis/model-agreement-snapshot/fingerprint.ts`, export `computeInputFingerprint(prisma, { scope, signature, domainIds, modelIds })` returning `{ sourceRunCount: number, sourceRunUpdatedAtSum: bigint }`. Use a single Prisma raw SELECT: `COUNT(*)::INT AS count` and `COALESCE(SUM(EXTRACT(EPOCH FROM "updatedAt")::BIGINT), 0)::BIGINT AS sum` over the source-run rows in scope (filter by signature, modelId in modelIds, domain matching the scope). Mirror the same scope/filter logic the live resolver uses for selecting source runs.
+- [ ] In `cloud/apps/api/tests/services/analysis/model-agreement-snapshot/canonical-key.test.ts`, assert: `canonicalKey` with `["a","b","c"]`, `["c","a","b"]`, and `["b","a","b","c"]` for `modelIds` (same scope/signature/domainIds) returns the same `modelIdsHash`; `"Claude"` and `"claude"` as different model IDs produce DIFFERENT hashes; empty `modelIds` produces a different hash from single-item; the output is exactly 32 hex characters and matches `/^[0-9a-f]{32}$/`.
+- [ ] In `cloud/apps/api/tests/services/analysis/model-agreement-snapshot/fingerprint.test.ts` (with `DATABASE_URL` + `JWT_SECRET`), seed three runs for a known (signature, domain, modelId set), compute the fingerprint, then: insert a new run → fingerprint count and sum both change; delete one existing run → both change; update an *older* (non-latest) run's `updatedAt` to a slightly different value → the `sum` changes (critical case — this is what `count + max(updatedAt)` would miss); two back-to-back calls with no DB changes return identical values.
+- [ ] From `cloud/`, run `npm run lint --workspace @valuerank/api`, `npm run test --workspace @valuerank/api` (with `DATABASE_URL` + `JWT_SECRET`), and `npm run build --workspace @valuerank/api`. No `any`, no `@ts-ignore`. Commit the slice.
 - [CHECKPOINT]
 
 ## Slice 2: Snapshot builder, cache reader, queue handler, run-completion fan-out
