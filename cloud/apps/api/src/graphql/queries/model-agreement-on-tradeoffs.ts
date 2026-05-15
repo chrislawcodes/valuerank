@@ -2,6 +2,7 @@ import { ValidationError } from '@valuerank/shared';
 import { db } from '@valuerank/db';
 import { builder } from '../builder.js';
 import { getModelsFromDatabase } from '../../config/models.js';
+import { getBoss } from '../../queue/boss.js';
 import {
   ModelAgreementResultRef,
   PairDivergenceBreakdownRef,
@@ -11,8 +12,10 @@ import {
 } from '../types/model-agreement-on-tradeoffs.js';
 import {
   buildEmptyPairBreakdown,
+  buildEmptyAgreementResult,
   buildPositionCells,
   computeProportionA,
+  normalizeModelIds,
   type CellOutcome,
   type ComparableCell,
   type CellChoice,
@@ -26,6 +29,7 @@ import { resolveDomainAnalysisScopeDefinitions } from '../../services/analysis/d
 import { resolveSignatureRuns } from '../queries/domain/shared.js';
 import { queueDomainAnalysisRefresh } from '../../services/analysis/domain-analysis-cache.js';
 import { readModelAgreementSnapshotStateFromSnapshot } from '../../services/analysis/domain-analysis-snapshot-readers.js';
+import { getModelAgreementSnapshot } from '../../services/analysis/model-agreement-snapshot/snapshot-cache.js';
 import {
   normalizeDomainIds,
   resolveDomainAnalysisSelection,
@@ -34,6 +38,35 @@ import {
 import type { Context } from '../context.js';
 
 const DRILLDOWN_REFRESH_REASON = 'model-pair-divergence-breakdown-missing';
+
+function sameModelSelection(left: readonly string[], right: readonly string[]): boolean {
+  if (left.length !== right.length) {
+    return false;
+  }
+  return left.every((value, index) => value === right[index]);
+}
+
+function attachFreshnessFields(
+  result: ModelAgreementResultShape,
+  freshness: {
+    snapshotComputedAt: Date | null;
+    snapshotIsStale: boolean | null;
+    snapshotSource: ModelAgreementResultShape['snapshotSource'];
+  },
+): ModelAgreementResultShape {
+  return {
+    ...result,
+    ...freshness,
+  };
+}
+
+function buildBuildingAgreementResult(): ModelAgreementResultShape {
+  return attachFreshnessFields(buildEmptyAgreementResult(true), {
+    snapshotComputedAt: null,
+    snapshotIsStale: false,
+    snapshotSource: 'BUILDING',
+  });
+}
 
 
 async function resolveAgreementScope(params: {
@@ -125,7 +158,86 @@ export async function resolveModelAgreementOnTradeoffs(
   },
   ctx: Context,
 ): Promise<ModelAgreementResultShape> {
-  return computeModelAgreement(db, args, { log: ctx.log });
+  const scopeValue = String(args.scope);
+  if (scopeValue !== 'DOMAIN' && scopeValue !== 'ALL_DOMAINS' && scopeValue !== 'DOMAIN_SET') {
+    throw new ValidationError(`Unsupported scope: ${scopeValue}`);
+  }
+
+  const domainId = args.domainId != null ? String(args.domainId).trim() : null;
+  const selection = resolveDomainAnalysisSelection({
+    scope: scopeValue,
+    domainId,
+    domainIds: normalizeDomainIds((args.domainIds ?? []).map(String)),
+  });
+  if (scopeValue === 'DOMAIN' && selection.scope !== 'DOMAIN') {
+    throw new ValidationError('domainId is required when scope is DOMAIN');
+  }
+  const scope: DomainAnalysisScope = selection.scope;
+
+  const signature = String(args.signature).trim();
+  if (signature.length === 0) {
+    throw new ValidationError('signature is required');
+  }
+
+  const selectedModelIds = normalizeModelIds(args.modelIds.map(String));
+  if (selectedModelIds.length < 2) {
+    throw new ValidationError('At least two distinct modelIds are required.');
+  }
+
+  const activeModels = await getModelsFromDatabase({ activeOnly: true, availableOnly: false });
+  const defaultModelIds = normalizeModelIds(activeModels.filter((model) => model.isDefault).map((model) => model.modelId));
+  const isCanonical = sameModelSelection(selectedModelIds, defaultModelIds);
+
+  if (isCanonical) {
+    const snapshotQueue = {
+      send: async (
+        name: string,
+        data: Parameters<ReturnType<typeof getBoss>['send']>[1],
+        options?: Parameters<ReturnType<typeof getBoss>['send']>[2],
+      ) => getBoss().send(name, data, options),
+    };
+    const snapshotResult = await getModelAgreementSnapshot(
+      db,
+      snapshotQueue,
+      {
+        scope,
+        domainId: selection.domainId,
+        domainIds: selection.domainIds,
+        signature,
+        modelIds: selectedModelIds,
+        isCanonical: true,
+      },
+    );
+
+    if (snapshotResult != null) {
+      if (snapshotResult.source === 'BUILDING') {
+        return buildBuildingAgreementResult();
+      }
+      const cachedPayload = snapshotResult.payload;
+      if (cachedPayload == null) {
+        return buildBuildingAgreementResult();
+      }
+      return attachFreshnessFields(cachedPayload, {
+        snapshotComputedAt: snapshotResult.snapshotComputedAt,
+        snapshotIsStale: snapshotResult.source === 'CACHE_HIT_STALE',
+        snapshotSource: snapshotResult.source,
+      });
+    }
+  }
+
+  const liveResult = await computeModelAgreement(db, {
+    modelIds: selectedModelIds,
+    domainId: selection.domainId,
+    domainIds: selection.domainIds,
+    scope,
+    signature,
+  }, { log: ctx.log });
+
+  return attachFreshnessFields(liveResult, {
+    snapshotComputedAt: null,
+    snapshotIsStale: false,
+    snapshotSource: 'LIVE_NON_CANONICAL',
+  });
 }
 
 export async function resolveModelPairDivergenceBreakdown(

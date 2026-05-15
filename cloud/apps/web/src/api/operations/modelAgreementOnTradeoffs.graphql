@@ -19,6 +19,9 @@ query ModelAgreementOnTradeoffs(
       currentRunId
       updatedAt
     }
+    snapshotComputedAt
+    snapshotIsStale
+    snapshotSource
     excludedNonBinaryCells
     tiedCells
     models {
