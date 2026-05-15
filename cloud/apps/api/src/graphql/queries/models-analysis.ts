@@ -1,4 +1,4 @@
-import { db } from '@valuerank/db';
+import { db, Prisma } from '@valuerank/db';
 import { getModelsFromDatabase } from '../../config/models.js';
 import { buildAssumptionKey, parseSnapshotOutput } from '../../services/analysis/domain-analysis-snapshot-builder.js';
 import { DOMAIN_ANALYSIS_ASSUMPTION_PREFIX, DOMAIN_ANALYSIS_SNAPSHOT_TYPE } from '../../services/analysis/domain-analysis-cache-types.js';
@@ -94,32 +94,35 @@ builder.queryField('modelsAnalysis', (t) =>
         availableOnly: false,
       });
 
-      const snapshots = await db.assumptionAnalysisSnapshot.findMany({
-        where: {
-          assumptionKey: selection.scope === 'ALL_DOMAINS'
-            ? {
-                startsWith: `${DOMAIN_ANALYSIS_ASSUMPTION_PREFIX}:`,
-              }
-            : selectionAssumptionKey,
-          analysisType: DOMAIN_ANALYSIS_SNAPSHOT_TYPE,
-          ...(signature != null ? { configSignature: signature } : {}),
-          status: 'CURRENT',
-          deletedAt: null,
-        },
-        select: {
-          id: true,
-          assumptionKey: true,
-          configSignature: true,
-          output: true,
-        },
-        orderBy: [
-          { createdAt: 'desc' },
-          { id: 'desc' },
-        ],
-      });
+      // Strip the per-cell `cellLevelOutcomes` field server-side via the JSONB
+      // minus-key operator. For ALL_DOMAINS this query fans across every
+      // domain's snapshot (~14 rows of multi-MB output JSONB), and the resolver
+      // only reads model.counts / valueWinRates / vignetteCount / valueWinRatesExcNeutral
+      // and the top-level domain id/name — it never touches cellLevelOutcomes.
+      // Sending that field over the wire was the ~22-27s cost at ALL_DOMAINS scope.
+      const assumptionKeyClause = selection.scope === 'ALL_DOMAINS'
+        ? Prisma.sql`assumption_key LIKE ${`${DOMAIN_ANALYSIS_ASSUMPTION_PREFIX}:%`}`
+        : Prisma.sql`assumption_key = ${selectionAssumptionKey}`;
+      const signatureClause = signature != null
+        ? Prisma.sql`AND config_signature = ${signature}`
+        : Prisma.sql``;
+      const snapshots = await db.$queryRaw<ModelsAnalysisSnapshotRow[]>`
+        SELECT
+          id,
+          assumption_key AS "assumptionKey",
+          config_signature AS "configSignature",
+          (output - 'cellLevelOutcomes') AS output
+        FROM assumption_analysis_snapshots
+        WHERE ${assumptionKeyClause}
+          AND analysis_type = ${DOMAIN_ANALYSIS_SNAPSHOT_TYPE}
+          AND status = 'CURRENT'
+          AND deleted_at IS NULL
+          ${signatureClause}
+        ORDER BY created_at DESC, id DESC
+      `;
 
       const selectedSnapshots = selectModelsAnalysisSnapshots(
-        snapshots as ModelsAnalysisSnapshotRow[],
+        snapshots,
         signature,
         {
           scope: selection.scope,
