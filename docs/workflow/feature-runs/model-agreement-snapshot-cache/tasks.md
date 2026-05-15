@@ -3,7 +3,7 @@
 ## Status
 
 - Slice 1a (extract compute service): complete (commit 4d80a543)
-- Slice 1b (Prisma model + types): not started
+- Slice 1b (Prisma model + types): complete (commit 8456d494)
 - Slice 1c (helpers + tests): not started
 - Slice 2: not started
 - Slice 3: not started
@@ -39,10 +39,10 @@ Files in scope:
 - `cloud/packages/db/prisma/migrations/<timestamp>_add_model_agreement_snapshot/migration.sql`
 - `cloud/apps/api/src/services/analysis/model-agreement-snapshot/snapshot-types.ts` (new)
 
-- [ ] In `cloud/packages/db/prisma/schema.prisma`, add a `ModelAgreementSnapshot` model with fields: `id String @id @default(cuid())`, `scope String`, `signature String`, `domainIdsHash String @db.Char(32)`, `modelIdsHash String @db.Char(32)`, `domainIds String[]`, `modelIds String[]`, `agreementResultJson Json`, `sourceRunCount Int`, `sourceRunUpdatedAtSum BigInt`, `algorithmVersion Int`, `computedAt DateTime`, `createdAt DateTime @default(now())`, `updatedAt DateTime @updatedAt`. Add `@@unique([scope, signature, domainIdsHash, modelIdsHash])` and `@@index([scope, signature])`.
-- [ ] Generate the migration via `DATABASE_URL=... npx prisma migrate dev --name add_model_agreement_snapshot --schema cloud/packages/db/prisma/schema.prisma`. Inspect the generated `migration.sql` and confirm it contains only `CREATE TABLE` + `CREATE INDEX` / `CREATE UNIQUE INDEX` statements on the new `model_agreement_snapshots` table (snake_cased) — NO `ALTER TABLE` against existing tables.
-- [ ] In `cloud/apps/api/src/services/analysis/model-agreement-snapshot/snapshot-types.ts`, export `ModelAgreementSnapshotInput` and `ModelAgreementSnapshotPayload` types matching the shape `computeModelAgreement` returns (from Slice 1a), plus a `ModelAgreementSnapshotSource` string-literal union: `'CACHE_HIT' | 'CACHE_HIT_STALE' | 'LIVE_NON_CANONICAL' | 'BUILDING'`, and a constant `AGREEMENT_ALGORITHM_VERSION = 1`. Add a top-of-file comment stating: "Bump AGREEMENT_ALGORITHM_VERSION whenever the agreement computation changes — it is part of the snapshot freshness check and old rows become stale on read when this changes."
-- [ ] From `cloud/`, run `npm run lint --workspace @valuerank/db`, `npm run lint --workspace @valuerank/api`, and `npm run build --workspace @valuerank/api`. No `any`, no `@ts-ignore`. Commit the slice (migration + schema + types together).
+- [x] In `cloud/packages/db/prisma/schema.prisma`, add a `ModelAgreementSnapshot` model with fields: `id String @id @default(cuid())`, `scope String`, `signature String`, `domainIdsHash String @db.Char(32)`, `modelIdsHash String @db.Char(32)`, `domainIds String[]`, `modelIds String[]`, `agreementResultJson Json`, `sourceRunCount Int`, `sourceRunUpdatedAtSum BigInt`, `algorithmVersion Int`, `computedAt DateTime`, `createdAt DateTime @default(now())`, `updatedAt DateTime @updatedAt`. Add `@@unique([scope, signature, domainIdsHash, modelIdsHash])` and `@@index([scope, signature])`.
+- [x] Generate the migration via `DATABASE_URL=... npx prisma migrate dev --name add_model_agreement_snapshot --schema cloud/packages/db/prisma/schema.prisma`. Inspect the generated `migration.sql` and confirm it contains only `CREATE TABLE` + `CREATE INDEX` / `CREATE UNIQUE INDEX` statements on the new `model_agreement_snapshots` table (snake_cased) — NO `ALTER TABLE` against existing tables.
+- [x] In `cloud/apps/api/src/services/analysis/model-agreement-snapshot/snapshot-types.ts`, export `ModelAgreementSnapshotInput` and `ModelAgreementSnapshotPayload` types matching the shape `computeModelAgreement` returns (from Slice 1a), plus a `ModelAgreementSnapshotSource` string-literal union: `'CACHE_HIT' | 'CACHE_HIT_STALE' | 'LIVE_NON_CANONICAL' | 'BUILDING'`, and a constant `AGREEMENT_ALGORITHM_VERSION = 1`. Add a top-of-file comment stating: "Bump AGREEMENT_ALGORITHM_VERSION whenever the agreement computation changes — it is part of the snapshot freshness check and old rows become stale on read when this changes."
+- [x] From `cloud/`, run `npm run lint --workspace @valuerank/db`, `npm run lint --workspace @valuerank/api`, and `npm run build --workspace @valuerank/api`. No `any`, no `@ts-ignore`. Commit the slice (migration + schema + types together).
 - [CHECKPOINT]
 
 ## Slice 1c: Canonical-key and fingerprint helpers + tests
