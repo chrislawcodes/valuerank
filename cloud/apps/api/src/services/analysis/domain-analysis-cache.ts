@@ -581,6 +581,14 @@ export async function getDomainAnalysisResult(params: {
   const parsedCurrent = currentSnapshot != null ? parseSnapshotOutput(currentSnapshot.output) : null;
 
   if (currentSnapshot != null && parsedCurrent != null && currentSnapshot.inputHash === state.inputHash) {
+    // The slow path just confirmed the snapshot's input hash still matches —
+    // that's the same validation the warming cron does. Stamp lastValidatedAt
+    // so subsequent reads within the TTL can fast-path. Self-heals per-domain
+    // snapshots (which the warming cron only covers for ALL_DOMAINS).
+    await db.assumptionAnalysisSnapshot.update({
+      where: { id: currentSnapshot.id },
+      data: { lastValidatedAt: new Date() },
+    });
     return buildDomainAnalysisResultFromSnapshot({
       snapshot: parsedCurrent,
       activeModels,
