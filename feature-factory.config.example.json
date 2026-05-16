@@ -1,0 +1,15 @@
+{
+  "repo": "OWNER/REPO",
+  "protected_files": [
+    "AGENTS.md",
+    "MEMORY.md",
+    "CLAUDE.md",
+    ".gitignore"
+  ],
+  "do_not_modify_prompt_files": [
+    "AGENTS.md",
+    "MEMORY.md",
+    "CLAUDE.md"
+  ],
+  "sync_script": null
+}
