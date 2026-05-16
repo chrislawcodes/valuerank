@@ -1,4 +1,5 @@
 import { ValidationError } from '@valuerank/shared';
+import { db } from '@valuerank/db';
 import { builder } from '../builder.js';
 import { getModelsFromDatabase } from '../../config/models.js';
 import { KappaClusterPayloadRef } from './domain/types.js';
@@ -22,6 +23,9 @@ import {
   queueDomainAnalysisRefresh,
 } from '../../services/analysis/domain-analysis-cache.js';
 import { readModelAgreementSnapshotStateFromSnapshot } from '../../services/analysis/domain-analysis-snapshot-readers.js';
+import { getModelAgreementSnapshot } from '../../services/analysis/model-agreement-snapshot/snapshot-cache.js';
+import type { ModelAgreementSnapshotPayload } from '../../services/analysis/model-agreement-snapshot/snapshot-types.js';
+import { getBoss } from '../../queue/boss.js';
 import {
   normalizeDomainIds,
   resolveDomainAnalysisSelection,
@@ -31,7 +35,14 @@ import type { Context } from '../context.js';
 
 const REFRESH_REASON = 'model-agreement-cluster-analysis-page-load-missing';
 
-function emptyPayload(reason: string): KappaClusterPayload {
+type KappaSnapshotFreshness = Pick<KappaClusterPayload, 'snapshotComputedAt' | 'snapshotSource'>;
+
+const EMPTY_FRESHNESS: KappaSnapshotFreshness = {
+  snapshotComputedAt: null,
+  snapshotSource: null,
+};
+
+function emptyPayload(reason: string, freshness: KappaSnapshotFreshness = EMPTY_FRESHNESS): KappaClusterPayload {
   return {
     clusterAnalysis: {
       clusters: [],
@@ -41,7 +52,15 @@ function emptyPayload(reason: string): KappaClusterPayload {
       skipReason: reason,
     },
     kappaPairs: [],
+    ...freshness,
   };
+}
+
+function sameModelSelection(left: readonly string[], right: readonly string[]): boolean {
+  if (left.length !== right.length) {
+    return false;
+  }
+  return left.every((value, index) => value === right[index]);
 }
 
 async function resolveScope(params: {
@@ -170,6 +189,67 @@ export async function resolveModelAgreementClusterAnalysis(
   const selectedModels = buildSelectedModels(selectedModelIds, labelByModelId);
   const selectedModelIdSet = new Set(selectedModels.map((model) => model.modelId));
 
+  // ----- Cache fast-path -----------------------------------------------------
+  // Reuse the model-agreement snapshot cache from PR #1100 for canonical
+  // selections. The clustering math is cheap once we have the kappa matrix;
+  // the live path's expensive step is computing the matrix. If the cache has
+  // it, skip straight to clustering.
+  const defaultModelIds = normalizeModelIds(activeModels.filter((model) => model.isDefault).map((model) => model.modelId));
+  const isCanonical = sameModelSelection(selectedModelIds, defaultModelIds);
+
+  if (isCanonical) {
+    const snapshotQueue = {
+      send: async (
+        name: string,
+        data: Parameters<ReturnType<typeof getBoss>['send']>[1],
+        options?: Parameters<ReturnType<typeof getBoss>['send']>[2],
+      ) => getBoss().send(name, data, options),
+    };
+    const snapshotResult = await getModelAgreementSnapshot(
+      db,
+      snapshotQueue,
+      {
+        scope,
+        domainId: selection.domainId,
+        domainIds: selection.domainIds,
+        signature,
+        modelIds: selectedModelIds,
+        isCanonical: true,
+      },
+    );
+
+    if (snapshotResult != null) {
+      if (snapshotResult.payload == null) {
+        // BUILDING — the cache reader has already queued a refresh.
+        return emptyPayload(
+          'Kappa cluster analysis is rebuilding — try again in a moment.',
+          { snapshotComputedAt: null, snapshotSource: 'BUILDING' },
+        );
+      }
+      // CACHE_HIT or CACHE_HIT_STALE — build cluster analysis from the cached matrix.
+      return await buildClusterAnalysisFromSnapshot({
+        payload: snapshotResult.payload,
+        method,
+        scope,
+        selection,
+        signature,
+        freshness: {
+          snapshotComputedAt: snapshotResult.snapshotComputedAt,
+          snapshotSource: snapshotResult.source,
+        },
+      });
+    }
+  }
+
+  // ----- Live fall-through path ---------------------------------------------
+  // Non-canonical selections (and any case where the canonical cache returned
+  // null) run the existing live computation. Carry LIVE_NON_CANONICAL through
+  // the freshness fields so the UI can suppress the "Cached as of" chip.
+  const LIVE_FRESHNESS: KappaSnapshotFreshness = {
+    snapshotComputedAt: null,
+    snapshotSource: 'LIVE_NON_CANONICAL',
+  };
+
   await resolveScope({
     scope,
     domainId: selection.domainId,
@@ -185,17 +265,17 @@ export async function resolveModelAgreementClusterAnalysis(
     ctx,
   });
   if (snapshotState == null) {
-    return emptyPayload('Kappa cluster analysis is rebuilding — try again in a moment.');
+    return emptyPayload('Kappa cluster analysis is rebuilding — try again in a moment.', LIVE_FRESHNESS);
   }
 
   const cellLevelOutcomes = snapshotState.cellLevelOutcomes;
   if (cellLevelOutcomes == null) {
-    return emptyPayload('Kappa cluster analysis is rebuilding — try again in a moment.');
+    return emptyPayload('Kappa cluster analysis is rebuilding — try again in a moment.', LIVE_FRESHNESS);
   }
   const { positionCells, cellsObservedByModelId } = buildPositionCells(cellLevelOutcomes, selectedModelIdSet);
   const availableModels = selectedModels.filter((model) => (cellsObservedByModelId.get(model.modelId) ?? 0) > 0);
   if (availableModels.length < 3) {
-    return emptyPayload('Kappa clustering requires at least 3 models with cell-level data in the selected scope.');
+    return emptyPayload('Kappa clustering requires at least 3 models with cell-level data in the selected scope.', LIVE_FRESHNESS);
   }
 
   // Pull log-odds scores from the domain-analysis result so the cluster centroids
@@ -216,7 +296,7 @@ export async function resolveModelAgreementClusterAnalysis(
   // has the same set of values, so pull from the first model that has data.
   const sampleValueScores = scoresByModelId.values().next().value;
   if (sampleValueScores == null) {
-    return emptyPayload('Kappa cluster analysis could not be computed because the domain-analysis snapshot has no model scores.');
+    return emptyPayload('Kappa cluster analysis could not be computed because the domain-analysis snapshot has no model scores.', LIVE_FRESHNESS);
   }
   const valueKeys = Object.keys(sampleValueScores);
   const zeroScores: Record<string, number> = Object.fromEntries(valueKeys.map((vk) => [vk, 0]));
@@ -245,7 +325,96 @@ export async function resolveModelAgreementClusterAnalysis(
     }
   }
 
-  return { clusterAnalysis, kappaPairs };
+  return { clusterAnalysis, kappaPairs, ...LIVE_FRESHNESS };
+}
+
+// Build cluster analysis from a cached snapshot. Skips the per-pair kappa
+// computation (which the live path runs in `buildKappaMatrix`) and instead
+// pulls the already-computed pair kappas out of the snapshot payload.
+async function buildClusterAnalysisFromSnapshot(params: {
+  payload: ModelAgreementSnapshotPayload;
+  method: ClusteringMethod;
+  scope: DomainAnalysisScope;
+  selection: { domainId: string; domainIds: string[] };
+  signature: string;
+  freshness: KappaSnapshotFreshness;
+}): Promise<KappaClusterPayload> {
+  const { payload, method, scope, selection, signature, freshness } = params;
+
+  if (payload.models.length < 3) {
+    return emptyPayload(
+      'Kappa clustering requires at least 3 models with cell-level data in the selected scope.',
+      freshness,
+    );
+  }
+
+  // Pull log-odds scores from the domain-analysis result so the cluster
+  // centroids and fault-lines are labeled the same way the live path labels
+  // them.
+  const domainAnalysis = await getDomainAnalysisResult({
+    scope,
+    domainId: selection.domainId,
+    domainIds: selection.domainIds,
+    requestedSignature: signature,
+  });
+  const scoresByModelId = new Map<string, Record<string, number>>();
+  for (const model of domainAnalysis.models) {
+    const scoreEntries = model.values.map((entry) => [entry.valueKey, entry.score] as const);
+    scoresByModelId.set(model.model, Object.fromEntries(scoreEntries));
+  }
+  const sampleValueScores = scoresByModelId.values().next().value;
+  if (sampleValueScores == null) {
+    return emptyPayload(
+      'Kappa cluster analysis could not be computed because the domain-analysis snapshot has no model scores.',
+      freshness,
+    );
+  }
+  const valueKeys = Object.keys(sampleValueScores);
+  const zeroScores: Record<string, number> = Object.fromEntries(valueKeys.map((vk) => [vk, 0]));
+
+  const clusterInputs: ClusterModelInput[] = payload.models.map((model) => ({
+    model: model.modelId,
+    label: model.label,
+    scores: scoresByModelId.get(model.modelId) ?? zeroScores,
+  }));
+
+  // Build a symmetric N×N kappa matrix indexed by `orderedModelIds`, sourced
+  // from the snapshot's flat pairwise list.
+  const orderedModelIds = clusterInputs.map((entry) => entry.model);
+  const n = orderedModelIds.length;
+  const kappaByPair = new Map<string, number | null>();
+  for (const row of payload.pairwiseAgreementMatrix) {
+    const keyAB = `${row.modelAId} ${row.modelBId}`;
+    const keyBA = `${row.modelBId} ${row.modelAId}`;
+    kappaByPair.set(keyAB, row.cohensKappa);
+    kappaByPair.set(keyBA, row.cohensKappa);
+  }
+
+  const kappaMatrix: Array<Array<number | null>> = Array.from({ length: n }, () => new Array<number | null>(n).fill(null));
+  for (let i = 0; i < n; i += 1) {
+    kappaMatrix[i]![i] = 1;
+    for (let j = i + 1; j < n; j += 1) {
+      const key = `${orderedModelIds[i]} ${orderedModelIds[j]}`;
+      const value = kappaByPair.get(key) ?? null;
+      kappaMatrix[i]![j] = value;
+      kappaMatrix[j]![i] = value;
+    }
+  }
+
+  const clusterAnalysis = computeKappaClusterAnalysis(clusterInputs, kappaMatrix, method);
+
+  const kappaPairs: KappaPair[] = [];
+  for (let i = 0; i < n; i += 1) {
+    for (let j = i + 1; j < n; j += 1) {
+      kappaPairs.push({
+        modelAId: orderedModelIds[i]!,
+        modelBId: orderedModelIds[j]!,
+        kappa: kappaMatrix[i]![j] ?? null,
+      });
+    }
+  }
+
+  return { clusterAnalysis, kappaPairs, ...freshness };
 }
 
 builder.queryField('modelAgreementClusterAnalysis', (t) =>

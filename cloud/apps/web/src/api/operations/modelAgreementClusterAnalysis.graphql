@@ -41,5 +41,7 @@ query ModelAgreementClusterAnalysis(
       leafOrder
       clusterIdByModelId
     }
+    snapshotComputedAt
+    snapshotSource
   }
 }
