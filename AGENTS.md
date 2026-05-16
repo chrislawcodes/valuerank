@@ -54,6 +54,7 @@ Canonical source: `docs/canonical-glossary.md`
 - One feature per branch. Do not stack new work on top of an open feature PR unless the human asks.
 - Fix the root cause when CI fails. Do not retry blindly.
 - In Feature Factory, "reconcile the findings" means address them in the artifact (spec/plan/tasks), then move on — NOT re-run the review until it comes back clean. The review round is capped; re-running to chase a clean result wastes the cap and the wall clock.
+- The Feature Factory runner is maintained at https://github.com/chrislawcodes/feature-factory and pulled into this repo via git subtree at `docs/workflow/operations/codex-skills/`. Project-specific values live in `feature-factory.config.json` at repo root. Update via `git subtree pull --prefix=docs/workflow/operations/codex-skills https://github.com/chrislawcodes/feature-factory.git main --squash`.
 
 ## Read First
 

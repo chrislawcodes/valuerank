@@ -15,21 +15,13 @@ if str(_SCRIPT_DIR) not in sys.path:
     sys.path.insert(0, str(_SCRIPT_DIR))
 
 from factory_state import REPO_ROOT  # noqa: E402
+from factory_config import get_protected_files, get_sync_script  # noqa: E402
 
-SYNC_SCRIPT = REPO_ROOT / "scripts" / "sync-codex-skills.py"
-
-# Files that agents (Codex, Gemini) frequently edit out-of-scope.
-# revert_protected_files() restores these to HEAD after every agent subprocess.
-PROTECTED_FILES = [
-    "CLAUDE.md",
-    "AGENTS.md",
-    "MEMORY.md",
-    "GEMINI.md",
-    ".gitignore",
-    "cloud/CLAUDE.md",
-    "cloud/GEMINI.md",
-    "cloud/agents.md",
-]
+# PROTECTED_FILES and SYNC_SCRIPT are now config-driven.
+# Use get_protected_files() / get_sync_script() at call sites.
+# These module-level names are kept for back-compat with any code that imports them directly.
+PROTECTED_FILES: list[str] = get_protected_files()
+_SYNC_SCRIPT_PATH = get_sync_script()  # Path | None
 
 
 def run(cmd: list[str]) -> None:
@@ -119,7 +111,11 @@ def command_path(name: str) -> str | None:
 
 
 def ensure_sync() -> None:
-    run([sys.executable, str(SYNC_SCRIPT), "--sync-if-needed"])
+    """Run the configured sync script, if any.  No-op when sync_script is null in config."""
+    script = get_sync_script()
+    if script is None:
+        return
+    run([sys.executable, str(script), "--sync-if-needed"])
 
 
 def ensure_file(path: Path, heading: str) -> None:

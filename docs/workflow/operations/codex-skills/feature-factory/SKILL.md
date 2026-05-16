@@ -91,7 +91,7 @@ Do not duplicate checkpoint manifest logic, review file validation, diff writing
 | Discovery | Ask clarifying questions one at a time, record assumptions, determine if spec is stable enough to proceed | Claude | Codex |
 | Write spec | Research real file paths in codebase, author `spec.md` with scope boundaries and acceptance criteria | Claude (research) · Codex (file paths) | Gemini (research) · Codex (authors) |
 | Spec checkpoint | Adversarial attack on spec, semantic review, reconcile findings into spec | Codex (1 adversarial review: `feasibility`) · Gemini (1 adversarial review: `requirements`) · Claude (reconciles) | Codex (1 adversarial review: `feasibility`) · Gemini (1 adversarial review: `requirements`) · Codex (reconciles, escalates blockers to human) |
-| Write plan | Author `plan.md` with architecture decisions, wave breakdown, and risk callouts. Each residual risk MUST have a `verification:` sentence naming a concrete pre-merge check (e.g., "run circumplexAnalysis against a production model ID", "inspect a failing fixture", "grep the migration output for N rows"). Unverified residual risks block plan approval — see "Residual risks must be verifiable" below. | Claude | Codex |
+| Write plan | Author `plan.md` with architecture decisions, wave breakdown, and risk callouts. Each residual risk MUST have a `verification:` sentence naming a concrete pre-merge check (e.g., "run the feature against a production-shaped fixture", "inspect a failing fixture", "grep the migration output for N rows"). Unverified residual risks block plan approval — see "Residual risks must be verifiable" below. | Claude | Codex |
 | Plan checkpoint | Adversarial attack on plan, architecture review, reconcile findings into plan | Codex (1 adversarial review: `implementation`) · Gemini (1 adversarial review: `testability`) · Claude (reconciles) | Codex (1 adversarial review: `implementation`) · Gemini (1 adversarial review: `testability`) · Codex (reconciles, escalates blockers to human) |
 | Write tasks | Author `tasks.md` with executable slices, checkpoint boundaries (`[CHECKPOINT]`), estimated diff size per slice, dependencies, and verification steps. No slice should exceed ~300 lines changed. | Claude | Codex |
 | Record parallel analysis | Look for safe parallel implementation opportunities in tasks.md. Annotate parallel tasks with `[P: file1, file2]`. Run `parallel --slug <slug> --note "..." [--found]`. If opportunities exist, add `[P:]` annotations first — the command validates they are conflict-free. | Claude | Codex |
@@ -123,11 +123,11 @@ Use `doctor` before or during a workflow when the local tooling or GitHub wiring
 
 **Examples:**
 
-- ❌ *"Pooling pressure conditions may wash out condition-specific structure."* — **NO verification.** Plan does not advance.
-- ✅ *"Pooling pressure conditions may wash out condition-specific structure.* **verification:** *compare circumplex ρ for diagonal-only vs all-conditions on two models via local GraphQL query; if they differ by > 0.2 flag before merge."*
-- ✅ *"Aggregation assumes primary runs (not rollup runs) carry transcripts.* **verification:** *smoke-test the circumplexAnalysis resolver against one production-populated model ID + signature via MCP graphql_query tool before merge; if trialsPerValue is all-zero, resolver is wrong."*
+- ❌ *"Batching may silently drop records under memory pressure."* — **NO verification.** Plan does not advance.
+- ✅ *"Batching may silently drop records under memory pressure.* **verification:** *run the pipeline against a fixture with N=10 000 records and assert output count matches input count before merge."*
+- ✅ *"Component assumes the data pipeline produces normalized IDs.* **verification:** *smoke-test the feature against a production-shaped fixture and assert no 'unknown ID' warnings appear in the output log."*
 
-**Why this rule exists:** the circumplex-report feature (2026-04-20) shipped with a data-model misunderstanding that made every model return zero trials in production. Both Codex adversarial reviewers had flagged the transcript-to-run join as an unverified assumption in residual risks. The orchestrator accepted those risks without specifying how they'd be checked; the implementation encoded the wrong assumption; review could not detect the wrongness because it had no runtime context. Requiring a concrete verification action forces the "how will we know this is OK?" conversation BEFORE the risk becomes a production bug.
+**Why this rule exists:** a feature shipped with a data-model misunderstanding that made every record return zero results in production. Both Codex adversarial reviewers had flagged the join assumption as unverified in residual risks. The orchestrator accepted those risks without specifying how they'd be checked; the implementation encoded the wrong assumption; review could not detect the wrongness because it had no runtime context. Requiring a concrete verification action forces the "how will we know this is OK?" conversation BEFORE the risk becomes a production bug.
 
 **Plan-checkpoint enforcement:** the plan adversarial reviewers (`implementation-adversarial`, `architecture-adversarial`, `testability-adversarial`) should reject any Residual Risks entry that lacks a `verification:` line. Reviewers who surface a new risk in their own findings must also state the verification action in their resolution note.
 
@@ -402,6 +402,6 @@ Where to look for cross-feature aggregation:
 - The skill should stay lean and prefer the existing Python scripts over new helper code.
 - The skill is the front door; the scripts are the durable workflow machinery.
 - If a repo script is missing or broken, say so briefly, fall back to the closest manual equivalent, and keep the artifact structure intact.
-- For workflow-system improvement work, treat [feature-workflow-plan.md](/Users/chrislaw/valuerank/docs/workflow/plans/feature-workflow-plan.md) as the maintained plan of record and keep it in sync with this skill.
+- For workflow-system improvement work, treat your project's feature-workflow plan as the maintained plan of record and keep it in sync with this skill.
 - Keep the workflow principle simple: spec before code, questions before assumptions, and move quickly once the requirements are clear enough to stabilize the spec and plan.
 - Use the repo-owned `discover` command to keep ambiguous-request discovery visible in workflow state when you are already tracking a workflow slice.

@@ -22,13 +22,13 @@ from factory_state import (  # noqa: E402
 )
 
 from factory_git import (  # noqa: E402
-    SYNC_SCRIPT,
     current_branch_name,
     upstream_branch_name,
     commits_behind_upstream,
     command_path,
     ensure_sync,
 )
+from factory_config import get_sync_script as _get_sync_script  # noqa: E402
 
 from factory_stages import (  # noqa: E402
     VERIFY_CHECKPOINT,
@@ -376,14 +376,17 @@ def command_doctor(args: argparse.Namespace) -> int:
         f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}",
     )
 
-    for label, path in {
-        "sync-script": SYNC_SCRIPT,
+    _sync_script = _get_sync_script()
+    _paths_to_check: dict[str, Path] = {
         "feature-runner": Path(__file__).resolve(),
         "write-diff": WRITE_DIFF,
         "repair": REPAIR,
         "verify-checkpoint": VERIFY_CHECKPOINT,
         "verify-reconciliation": VERIFY_RECONCILIATION,
-    }.items():
+    }
+    if _sync_script is not None:
+        _paths_to_check["sync-script"] = _sync_script
+    for label, path in _paths_to_check.items():
         add(label, "ok" if path.exists() else "fail", str(path))
 
     for tool_name in ["git", "codex", "gemini", "gh"]:
@@ -391,8 +394,12 @@ def command_doctor(args: argparse.Namespace) -> int:
         level = "ok" if found else ("warn" if tool_name == "gh" else "fail")
         add(f"tool:{tool_name}", level, found or "not installed")
 
-    sync_check = subprocess.run([sys.executable, str(SYNC_SCRIPT), "--check"], text=True, capture_output=True)
-    add("skill-sync", "ok" if sync_check.returncode == 0 else "warn", "in sync" if sync_check.returncode == 0 else "needs sync")
+    _sync_script_path = _get_sync_script()
+    if _sync_script_path is not None:
+        sync_check = subprocess.run([sys.executable, str(_sync_script_path), "--check"], text=True, capture_output=True)
+        add("skill-sync", "ok" if sync_check.returncode == 0 else "warn", "in sync" if sync_check.returncode == 0 else "needs sync")
+    else:
+        add("skill-sync", "ok", "no sync script configured")
 
     branch = current_branch_name()
     add("git-branch", "ok" if branch else "warn", branch or "detached HEAD")

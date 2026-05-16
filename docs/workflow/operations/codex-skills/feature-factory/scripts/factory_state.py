@@ -32,7 +32,26 @@ from workflow_utils import normalized_artifact_hash, normalized_artifact_text
 # Repository root + canonical subdirectory roots
 # ---------------------------------------------------------------------------
 
-_DEFAULT_REPO_ROOT = Path(__file__).resolve().parents[6]
+def _default_repo_root_from_file_path() -> Path:
+    """Return a best-effort repo root based on file depth.
+
+    In valuerank, the scripts live 6 levels deep from the repo root
+    (docs/workflow/operations/codex-skills/feature-factory/scripts/).
+    In the standalone feature-factory repo, the scripts live 2 levels deep
+    (feature-factory/scripts/).  We try parents[6] first; fall back to the
+    git-root if the index is out of range.
+    """
+    parents = Path(__file__).resolve().parents
+    try:
+        return parents[6]
+    except IndexError:
+        # Fewer than 7 ancestors — we're in a shallower install.
+        # Return the deepest ancestor we have; _resolve_repo_root() will
+        # override this with the real git root anyway.
+        return parents[len(parents) - 1]
+
+
+_DEFAULT_REPO_ROOT = _default_repo_root_from_file_path()
 
 
 def _resolve_repo_root() -> Path:

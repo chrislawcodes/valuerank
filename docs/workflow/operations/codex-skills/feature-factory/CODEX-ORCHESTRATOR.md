@@ -129,10 +129,10 @@ When all checkpoints are reconciled and implementation is complete:
 git push --set-upstream origin <branch-name>
 ```
 
-**Step 2:** Create the PR against `main` on `chrislawcodes/valuerank`:
+**Step 2:** Create the PR against `main` on your repo (set in `feature-factory.config.json`):
 ```bash
 gh pr create \
-  --repo chrislawcodes/valuerank \
+  --repo <OWNER/REPO> \
   --base main \
   --title "<concise title matching commit style>" \
   --body "$(cat <<'EOF'

@@ -59,9 +59,14 @@ def _deferred_reviews(slug: str | None) -> list[dict]:
     if not slug:
         return []
     try:
-        from pathlib import Path as _Path
         import re as _re
-        repo_root = _Path(__file__).resolve().parents[5]
+        import sys as _sys
+        from pathlib import Path as _Path
+        _script_dir = _Path(__file__).resolve().parent
+        if str(_script_dir) not in _sys.path:
+            _sys.path.insert(0, str(_script_dir))
+        from factory_state import REPO_ROOT as _REPO_ROOT  # noqa: PLC0415
+        repo_root = _REPO_ROOT
         reviews_dir = repo_root / "docs" / "workflow" / "feature-runs" / slug / "reviews"
         if not reviews_dir.exists():
             return []

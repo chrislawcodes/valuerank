@@ -32,7 +32,15 @@ from factory_state import (  # noqa: E402
 )
 from factory_io import read_text  # noqa: E402
 
-REVIEW_SCRIPTS = REPO_ROOT / "docs" / "workflow" / "operations" / "codex-skills" / "review-lens" / "scripts"
+# Resolve review-lens scripts directory.
+# When the runner is embedded in a host repo via git subtree at
+# docs/workflow/operations/codex-skills/, the review-lens sits beside the
+# feature-factory dir, so both the _SCRIPT_DIR-relative and REPO_ROOT-relative
+# paths work. In the standalone feature-factory repo, only the _SCRIPT_DIR-
+# relative path works (review-lens/ is a sibling of feature-factory/).
+_review_scripts_relative = (_SCRIPT_DIR.parents[1] / "review-lens" / "scripts").resolve()
+_review_scripts_host = REPO_ROOT / "docs" / "workflow" / "operations" / "codex-skills" / "review-lens" / "scripts"
+REVIEW_SCRIPTS = _review_scripts_relative if _review_scripts_relative.exists() else _review_scripts_host
 if str(REVIEW_SCRIPTS) not in sys.path:
     sys.path.insert(0, str(REVIEW_SCRIPTS))
 

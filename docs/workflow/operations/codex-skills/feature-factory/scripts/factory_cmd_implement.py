@@ -31,6 +31,7 @@ from factory_git import (  # noqa: E402
     stage_and_commit_if_dirty,
     cherry_pick_commits,
 )
+from factory_config import get_do_not_modify_prompt_files  # noqa: E402
 
 from factory_stages import parse_parallel_task_groups  # noqa: E402
 
@@ -97,7 +98,7 @@ def _build_codex_prompt(slug: str, i: int, tasks: list[str], file_scope: list[st
         "## File scope\n"
         f"{chr(10).join(map(str, file_scope)) if file_scope else '(no specific scope — implement all tasks)'}\n\n"
         "Implement the tasks above. Commit your changes when done.\n"
-        "DO NOT MODIFY: CLAUDE.md, AGENTS.md, MEMORY.md, or any file not in your file scope.\n"
+        f"DO NOT MODIFY: {', '.join(get_do_not_modify_prompt_files())}, or any file not in your file scope.\n"
     )
     prompt_path.write_text(prompt_text, encoding="utf-8")
     return prompt_text

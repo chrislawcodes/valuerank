@@ -1,0 +1,6 @@
+{
+  "repo": "chrislawcodes/valuerank",
+  "protected_files": ["AGENTS.md", "MEMORY.md", "cloud/CLAUDE.md", "cloud/AGENTS.md", ".gitignore"],
+  "do_not_modify_prompt_files": ["AGENTS.md", "MEMORY.md", "cloud/CLAUDE.md"],
+  "sync_script": null
+}
