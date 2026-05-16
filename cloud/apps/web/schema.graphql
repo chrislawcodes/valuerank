@@ -1476,6 +1476,8 @@ type JobTypeStatus {
 type KappaClusterPayload {
   clusterAnalysis: ClusterAnalysis!
   kappaPairs: [KappaPair!]!
+  snapshotComputedAt: DateTime
+  snapshotSource: String
 }
 
 type KappaPair {

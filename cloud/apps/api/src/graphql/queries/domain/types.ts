@@ -47,6 +47,11 @@ export type KappaPair = {
 export type KappaClusterPayload = {
   clusterAnalysis: ClusterAnalysis;
   kappaPairs: KappaPair[];
+  // Freshness fields populated when the kappa matrix came from the
+  // model-agreement snapshot cache. null on live (non-canonical) selections
+  // and on empty/skipped payloads.
+  snapshotComputedAt: Date | null;
+  snapshotSource: 'CACHE_HIT' | 'CACHE_HIT_STALE' | 'LIVE_NON_CANONICAL' | 'BUILDING' | null;
 };
 
 export type PairwiseWinRateModel = {
@@ -240,6 +245,16 @@ builder.objectType(KappaClusterPayloadRef, {
     kappaPairs: t.field({
       type: [KappaPairRef],
       resolve: (parent) => parent.kappaPairs,
+    }),
+    snapshotComputedAt: t.field({
+      type: 'DateTime',
+      nullable: true,
+      resolve: (parent) => parent.snapshotComputedAt,
+    }),
+    snapshotSource: t.field({
+      type: 'String',
+      nullable: true,
+      resolve: (parent) => parent.snapshotSource,
     }),
   }),
 });
