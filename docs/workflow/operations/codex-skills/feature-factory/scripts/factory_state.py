@@ -25,41 +25,22 @@ if str(_REVIEW_SCRIPTS) not in sys.path:
     sys.path.insert(0, str(_REVIEW_SCRIPTS))
 
 from factory_io import atomic_write_text, read_text
-from workflow_utils import normalized_artifact_hash, normalized_artifact_text
+from workflow_utils import normalized_artifact_hash, normalized_artifact_text, resolve_repo_root
 
 
 # ---------------------------------------------------------------------------
 # Repository root + canonical subdirectory roots
 # ---------------------------------------------------------------------------
 
-_DEFAULT_REPO_ROOT = Path(__file__).resolve().parents[6]
-
-
 def _resolve_repo_root() -> Path:
-    """Resolve the repository root, preferring the current git worktree.
+    """Resolve the target repository root the factory is operating on.
 
-    This keeps the runner pointed at the active worktree when the operator is
-    running from a nested git worktree instead of the main checkout. If the
-    current directory is not inside a git repository, fall back to the
-    historical path derived from this file so installs and tests still work.
+    Thin wrapper over the shared :func:`workflow_utils.resolve_repo_root` so the
+    engine and the review-lens scripts answer "which repo are we acting on" the
+    same way (``$FF_REPO_ROOT`` -> recorded repo root -> current git worktree ->
+    install-location fallback). Kept as a named helper for callers and tests.
     """
-    override = os.environ.get("FF_REPO_ROOT")
-    if override:
-        return Path(override).expanduser().resolve()
-
-    git_result = subprocess.run(
-        ["git", "rev-parse", "--show-toplevel"],
-        cwd=Path.cwd(),
-        text=True,
-        capture_output=True,
-        check=False,
-    )
-    if git_result.returncode == 0:
-        git_root = git_result.stdout.strip()
-        if git_root:
-            return Path(git_root).expanduser().resolve()
-
-    return _DEFAULT_REPO_ROOT
+    return resolve_repo_root()
 
 
 REPO_ROOT: Path = _resolve_repo_root()

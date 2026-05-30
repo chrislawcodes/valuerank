@@ -59,10 +59,14 @@ def _deferred_reviews(slug: str | None) -> list[dict]:
     if not slug:
         return []
     try:
-        from pathlib import Path as _Path
         import re as _re
-        repo_root = _Path(__file__).resolve().parents[5]
-        reviews_dir = repo_root / "docs" / "workflow" / "feature-runs" / slug / "reviews"
+        # Use the canonical, target-aware runs root rather than re-deriving a
+        # path from this file's location. The old `parents[5]` resolved to the
+        # engine's docs/ dir (then appended "docs/workflow/..." -> a doubled
+        # "docs/docs" that never existed), so this silently returned [] even
+        # in-repo. FACTORY_RUNS_ROOT points at the *target* repo's feature-runs.
+        from factory_state import FACTORY_RUNS_ROOT, REPO_ROOT
+        reviews_dir = FACTORY_RUNS_ROOT / slug / "reviews"
         if not reviews_dir.exists():
             return []
     except Exception:
@@ -88,7 +92,7 @@ def _deferred_reviews(slug: str | None) -> list[dict]:
         stage_match = _re.search(r'stage:\s*"([^"]+)"', frontmatter)
         deferred.append(
             {
-                "path": str(review_path.relative_to(repo_root)),
+                "path": str(review_path.relative_to(REPO_ROOT)),
                 "stage": stage_match.group(1) if stage_match else "?",
                 "reviewer": reviewer_match.group(1) if reviewer_match else "?",
                 "lens": lens_match.group(1) if lens_match else "?",

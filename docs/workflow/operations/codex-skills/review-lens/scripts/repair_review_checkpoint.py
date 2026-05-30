@@ -14,9 +14,16 @@ VERIFY = SCRIPT_DIR / "verify_review_checkpoint.py"
 if str(SCRIPT_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPT_DIR))
 
-from workflow_utils import artifact_hash_matches, normalized_artifact_text, resolve_stored_path
+from workflow_utils import (
+    artifact_hash_matches,
+    normalized_artifact_text,
+    resolve_repo_root,
+    resolve_stored_path,
+)
 
-REPO_ROOT = SCRIPT_DIR.parents[5]
+# The target repo being operated on — may differ from where these scripts live
+# (cross-repo use). Resolved the same way the engine resolves it.
+REPO_ROOT = resolve_repo_root()
 REPAIR_LIMIT_BUFFER_CHARS = 1000
 REPAIR_MIN_TOTAL_BUFFER_CHARS = 10000
 

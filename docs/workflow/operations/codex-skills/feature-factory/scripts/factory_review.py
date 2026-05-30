@@ -32,7 +32,9 @@ from factory_state import (  # noqa: E402
 )
 from factory_io import read_text  # noqa: E402
 
-REVIEW_SCRIPTS = REPO_ROOT / "docs" / "workflow" / "operations" / "codex-skills" / "review-lens" / "scripts"
+# Review-lens scripts ship with the engine, so locate them relative to this
+# file — NOT relative to REPO_ROOT (the target repo, which may be elsewhere).
+REVIEW_SCRIPTS = _SCRIPT_DIR.parents[1] / "review-lens" / "scripts"
 if str(REVIEW_SCRIPTS) not in sys.path:
     sys.path.insert(0, str(REVIEW_SCRIPTS))
 

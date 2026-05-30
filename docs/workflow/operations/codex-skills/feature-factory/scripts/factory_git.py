@@ -119,6 +119,13 @@ def command_path(name: str) -> str | None:
 
 
 def ensure_sync() -> None:
+    # The sync script is a per-target-repo helper (it lives at the target's
+    # scripts/sync-codex-skills.py). When the factory runs against a repo that
+    # does not ship one — i.e. any repo other than the engine's own — there is
+    # nothing to sync, so skip gracefully instead of forcing every target repo
+    # to carry a stub.
+    if not SYNC_SCRIPT.exists():
+        return
     run([sys.executable, str(SYNC_SCRIPT), "--sync-if-needed"])
 
 

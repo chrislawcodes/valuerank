@@ -1,7 +1,62 @@
 #!/usr/bin/env python3
 import hashlib
+import os
 import re
+import subprocess
 from pathlib import Path
+
+
+def _toolchain_repo_root() -> Path:
+    """Return the repo root derived from this file's install location.
+
+    This is the factory's *own* checkout — used only as a last-resort fallback
+    when no target repo can be determined from the environment, recorded data,
+    or the current git worktree. workflow_utils.py lives six directories below
+    the repo root (docs/workflow/operations/codex-skills/review-lens/scripts/).
+    """
+    return Path(__file__).resolve().parents[6]
+
+
+def resolve_repo_root(stored_repo_root: str = "") -> Path:
+    """Resolve the TARGET repository root the factory is operating on.
+
+    This is the single source of truth for "which repo are we acting on" shared
+    by the feature-factory engine and the review-lens scripts. The factory's own
+    scripts may live in a different repo than the one under work (cross-repo
+    use), so tool location and target repo must be resolved separately — tool
+    paths stay engine-relative, while every artifact / review / feature-run path
+    resolves against the root this function returns.
+
+    Resolution order, highest priority first:
+      1. ``$FF_REPO_ROOT`` — explicit operator override.
+      2. ``stored_repo_root`` — an absolute repo root recorded in checkpoint or
+         review data. Skipped when blank, relative (e.g. the historical ``"."``),
+         or not an existing directory.
+      3. The current git worktree (``git rev-parse --show-toplevel`` from cwd).
+      4. The factory's own install location (in-repo fallback for installs/tests).
+    """
+    override = os.environ.get("FF_REPO_ROOT")
+    if override:
+        return Path(override).expanduser().resolve()
+
+    if stored_repo_root:
+        candidate = Path(stored_repo_root).expanduser()
+        if candidate.is_absolute() and candidate.is_dir():
+            return candidate.resolve()
+
+    git_result = subprocess.run(
+        ["git", "rev-parse", "--show-toplevel"],
+        cwd=Path.cwd(),
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    if git_result.returncode == 0:
+        git_root = git_result.stdout.strip()
+        if git_root:
+            return Path(git_root).expanduser().resolve()
+
+    return _toolchain_repo_root()
 
 
 def repo_relative_path(path: Path, repo_root: Path) -> str:

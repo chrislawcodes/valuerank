@@ -377,7 +377,6 @@ def command_doctor(args: argparse.Namespace) -> int:
     )
 
     for label, path in {
-        "sync-script": SYNC_SCRIPT,
         "feature-runner": Path(__file__).resolve(),
         "write-diff": WRITE_DIFF,
         "repair": REPAIR,
@@ -391,8 +390,16 @@ def command_doctor(args: argparse.Namespace) -> int:
         level = "ok" if found else ("warn" if tool_name == "gh" else "fail")
         add(f"tool:{tool_name}", level, found or "not installed")
 
-    sync_check = subprocess.run([sys.executable, str(SYNC_SCRIPT), "--check"], text=True, capture_output=True)
-    add("skill-sync", "ok" if sync_check.returncode == 0 else "warn", "in sync" if sync_check.returncode == 0 else "needs sync")
+    # The sync script is an optional per-target-repo helper. Repos other than
+    # the engine's own ship none, and that is expected — report it as not
+    # applicable rather than a failure (mirrors factory_git.ensure_sync()).
+    if SYNC_SCRIPT.exists():
+        add("sync-script", "ok", str(SYNC_SCRIPT))
+        sync_check = subprocess.run([sys.executable, str(SYNC_SCRIPT), "--check"], text=True, capture_output=True)
+        add("skill-sync", "ok" if sync_check.returncode == 0 else "warn", "in sync" if sync_check.returncode == 0 else "needs sync")
+    else:
+        add("sync-script", "ok", f"not present — skipped ({SYNC_SCRIPT})")
+        add("skill-sync", "ok", "n/a (target repo ships no sync script)")
 
     branch = current_branch_name()
     add("git-branch", "ok" if branch else "warn", branch or "detached HEAD")
