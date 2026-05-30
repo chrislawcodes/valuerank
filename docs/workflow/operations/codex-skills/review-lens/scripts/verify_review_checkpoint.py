@@ -6,11 +6,19 @@ import sys
 from pathlib import Path
 
 SCRIPT_DIR = Path(__file__).resolve().parent
-REPO_ROOT = SCRIPT_DIR.parents[5]
 if str(SCRIPT_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPT_DIR))
 
-from workflow_utils import artifact_hash_matches, normalized_artifact_hash, resolve_stored_path
+from workflow_utils import (
+    artifact_hash_matches,
+    normalized_artifact_hash,
+    resolve_repo_root,
+    resolve_stored_path,
+)
+
+# The target repo being operated on — may differ from where these scripts live
+# (cross-repo use). Resolved the same way the engine resolves it.
+REPO_ROOT = resolve_repo_root()
 
 
 REQUIRED_KEYS = {
